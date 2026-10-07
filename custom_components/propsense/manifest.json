@@ -1,13 +1,13 @@
 {
   "domain": "propsense",
   "name": "PropSense",
-  "codeowners": ["@almadon"],
+  "codeowners": ["@tmeuze"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/almadon/ha-propsense#readme",
+  "documentation": "https://github.com/tmeuze/ha-propsense#readme",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/almadon/ha-propsense/issues",
+  "issue_tracker": "https://github.com/tmeuze/ha-propsense/issues",
   "requirements": [],
   "single_config_entry": true,
   "version": "0.1.0"
