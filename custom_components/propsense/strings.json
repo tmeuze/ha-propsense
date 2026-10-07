@@ -1,0 +1,134 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up PropSense",
+        "description": "PropSense applies rules to your devices and entities based on labels, floors, areas and groups. Version 0.1 exposes entities to voice assistants. Create your rules afterwards from the integration's Configure button."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "PropSense is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "PropSense",
+        "description": "Rules decide which entities are exposed to voice assistants. They are the single source of truth: anything not selected by a rule is not exposed.",
+        "menu_options": {
+          "add_rule": "Add a rule",
+          "pick_rule": "Edit, disable or delete a rule",
+          "settings": "Settings",
+          "preview": "Preview what the rules would do"
+        }
+      },
+      "pick_rule": {
+        "title": "Choose a rule",
+        "data": {
+          "rule": "Rule"
+        }
+      },
+      "rule_menu": {
+        "title": "Rule",
+        "menu_options": {
+          "edit_rule": "Edit",
+          "toggle_rule": "Enable or disable",
+          "delete_rule": "Delete"
+        }
+      },
+      "rule_include": {
+        "title": "Rule: what to include",
+        "description": "Every field you fill in must match (and), and within a field any value will do (or). An empty selection matches nothing.",
+        "data": {
+          "name": "Name",
+          "enabled": "Enabled",
+          "assistants": "Expose to",
+          "include_labels": "Labels",
+          "include_areas": "Areas",
+          "include_floors": "Floors",
+          "include_domains": "Domains",
+          "include_devices": "Devices",
+          "include_entities": "Entities",
+          "include_groups": "Groups"
+        },
+        "data_description": {
+          "assistants": "The voice assistants these entities are exposed to.",
+          "include_labels": "Matches an entity that has any of these labels (its own, or its device's).",
+          "include_areas": "Matches an entity in any of these areas (its own, or its device's).",
+          "include_floors": "Matches an entity in an area on any of these floors.",
+          "include_domains": "Matches entities of these domains, for example light or switch.",
+          "include_devices": "Matches entities belonging to any of these devices.",
+          "include_entities": "Matches exactly these entities.",
+          "include_groups": "Matches members of these group entities (nested groups included)."
+        }
+      },
+      "rule_exclude": {
+        "title": "Rule: what to leave out",
+        "description": "Optional. Entities matching all of the fields you fill in here are removed from this rule.",
+        "data": {
+          "exclude_labels": "Labels",
+          "exclude_areas": "Areas",
+          "exclude_floors": "Floors",
+          "exclude_domains": "Domains",
+          "exclude_devices": "Devices",
+          "exclude_entities": "Entities",
+          "exclude_groups": "Groups"
+        },
+        "data_description": {
+          "exclude_labels": "Matches an entity that has any of these labels (its own, or its device's).",
+          "exclude_areas": "Matches an entity in any of these areas (its own, or its device's).",
+          "exclude_floors": "Matches an entity in an area on any of these floors.",
+          "exclude_domains": "Matches entities of these domains, for example light or switch.",
+          "exclude_devices": "Matches entities belonging to any of these devices.",
+          "exclude_entities": "Matches exactly these entities.",
+          "exclude_groups": "Matches members of these group entities (nested groups included)."
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "data": {
+          "managed_assistants": "Assistants PropSense manages",
+          "blocked_domains": "Never expose these domains",
+          "max_exposed": "Most entities to expose per assistant (0 for no limit)",
+          "inherit_device_labels": "Entities inherit their device's labels",
+          "inherit_area_labels": "Entities inherit their area's labels",
+          "dry_run": "Dry run (compute, but change nothing)"
+        },
+        "data_description": {
+          "managed_assistants": "For these assistants PropSense is authoritative: anything its rules do not select is un-exposed, including entities ticked by hand.",
+          "blocked_domains": "Safety list. Matching entities are reported but never exposed, whatever a rule says.",
+          "max_exposed": "If the rules would expose more than this, PropSense changes nothing and raises a repair. Small voice models cope with roughly 60 to 100 entities."
+        }
+      },
+      "preview": {
+        "title": "Preview",
+        "description": "{summary}\n\nNothing has been changed."
+      }
+    },
+    "error": {
+      "empty_selector": "Select at least one label, area, floor, domain, device, entity or group to include."
+    }
+  },
+  "issues": {
+    "too_many_exposed": {
+      "title": "PropSense refused to expose too many entities",
+      "description": "The rules would expose {count} entities to {assistant}, above the limit of {max}. Exposure was left unchanged. Narrow the rules or raise the limit in the integration's settings."
+    }
+  },
+  "services": {
+    "resync": {
+      "name": "Resync",
+      "description": "Recompute the rules and apply them now.",
+      "fields": {
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Compute the result without changing anything."
+        }
+      }
+    },
+    "preview": {
+      "name": "Preview",
+      "description": "Return what the rules would do, without changing anything."
+    }
+  }
+}
