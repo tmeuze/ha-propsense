@@ -89,7 +89,7 @@ Mind your model's context budget too. Each exposed entity costs roughly 26 promp
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install pytest-homeassistant-custom-component
+.venv/bin/pip install -r requirements-test.txt
 .venv/bin/python -m pytest -q
 ```
 

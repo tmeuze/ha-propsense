@@ -1,3 +1,17 @@
+[project]
+name = "ha-propsense"
+version = "0.1.0"
+description = "Home Assistant integration: rules and actions driven by labels and metadata"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+# The integration has no runtime requirements of its own (see manifest.json);
+# Home Assistant supplies everything it imports.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest-homeassistant-custom-component"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
