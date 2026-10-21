@@ -256,8 +256,8 @@ async def test_options_flow_adds_a_rule_that_takes_effect(hass, label):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await settle(hass)
 
-    assert len(entry.options["rules"]) == 1
-    assert entry.options["rules"][0]["include"]["labels"] == [label]
+    assert len(entry.runtime_data.rules_raw) == 1
+    assert entry.runtime_data.rules_raw[0]["include"]["labels"] == [label]
     assert exposed(hass) == {kitchen}
 
 
@@ -279,7 +279,7 @@ async def test_options_flow_toggle_and_delete(hass, label):
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await settle(hass)
-    assert entry.options["rules"][0]["enabled"] is False
+    assert entry.runtime_data.rules_raw[0]["enabled"] is False
     assert exposed(hass) == set()
 
     # delete it
@@ -294,7 +294,7 @@ async def test_options_flow_toggle_and_delete(hass, label):
         result["flow_id"], {"next_step_id": "delete_rule"}
     )
     await settle(hass)
-    assert entry.options["rules"] == []
+    assert entry.runtime_data.rules_raw == []
 
 
 async def test_options_flow_preview_shows_summary_and_changes_nothing(hass, label):

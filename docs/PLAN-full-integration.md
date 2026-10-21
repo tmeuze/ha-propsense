@@ -46,7 +46,7 @@ class ActionType(Protocol):
     def config_schema(self) -> vol.Schema: ...      # also drives the UI form
     def targets(self, config) -> set[str]: ...
     async def async_current(self, target) -> set[str]: ...          # state mode
-    async def async_apply(self, target, add: set[str], remove: set[str], *, dry_run: bool) -> None: ...
+    async def async_apply(self, target, add: set[str], remove: set[str]) -> None: ...   # the core never calls it on a dry run
 
 def async_register_action(hass, action: ActionType) -> Callable[[], None]   # returns unregister
 ```
@@ -72,7 +72,10 @@ All admin only, under `propsense/`:
 - Reuses HA's own `ha-selector` and pickers for labels, areas, floors, entities and devices.
 - Screens: rule list (selector summaries, match count, enable toggle), rule editor (include/exclude, actions with forms from `config_schema`, live preview), settings, status and dry-run diff, entity explainer.
 
-## 6. Phases (each ends green and commits on the branch)
+## 6. Phases
+
+Phase 1 status: done on `feat/core-actions` (registry, actions, third-party opt-in, Store with migration). One departure: edge actions record the selection the first time a target is seen and fire nothing, so adding an edge rule doesn't fire for entities that already match.
+ (each ends green and commits on the branch)
 
 1. **Core refactor:** `Rule.actions`, registry, state/edge modes, expose as the first provider, Store plus migration. All existing tests pass, new engine/registry tests.
 2. **Websocket API and services**, with tests in the HA harness.

@@ -15,10 +15,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from homeassistant.components.homeassistant.exposed_entities import (
-    async_expose_entity,
-    async_get_assistant_settings,
-)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
@@ -32,11 +28,13 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
 
+from .api import ActionRegistry, async_get_registry
 from .const import (
     ASSISTANT_LABELS,
     CONF_RULES,
@@ -48,6 +46,8 @@ from .const import (
     SIGNAL_UPDATED,
 )
 from .engine import (
+    ActionSpec,
+    EXPOSE,
     Plan,
     Rule,
     Settings,
@@ -69,51 +69,74 @@ _REGISTRY_EVENTS = (
 
 
 @dataclass
-class AssistantResult:
-    assistant: str
+class TargetResult:
+    """The outcome for one target of one action type (an assistant for expose)."""
+
+    target: str
     desired: list[str] = field(default_factory=list)
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
     refused: bool = False
-    # What is actually exposed once this run finished (differs from `desired`
-    # when the plan was refused or this was a dry run).
+    # What the target actually has once this run finished (differs from
+    # `desired` when the plan was refused or this was a dry run).
     exposed: list[str] = field(default_factory=list)
+    error: str | None = None
 
     @property
     def count(self) -> int:
         return len(self.desired)
 
 
+# 0.1 name, kept for readers of the old code.
+AssistantResult = TargetResult
+
+
 @dataclass
 class ApplyResult:
     dry_run: bool
     at: datetime
-    assistants: dict[str, AssistantResult] = field(default_factory=dict)
+    # action type -> target -> result. ``assistants`` is the expose entry.
+    actions: dict[str, dict[str, TargetResult]] = field(default_factory=dict)
     by_rule: dict[str, int] = field(default_factory=dict)
     rule_names: dict[str, str] = field(default_factory=dict)
     blocked: dict[str, str] = field(default_factory=dict)
+    dormant: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def assistants(self) -> dict[str, TargetResult]:
+        return self.actions.setdefault(EXPOSE, {})
 
     def to_dict(self) -> dict[str, Any]:
+        def target_dict(r: TargetResult) -> dict[str, Any]:
+            return {
+                "count": r.count,
+                "estimated_tokens": estimated_tokens(r.count),
+                "refused": r.refused,
+                "added": r.added,
+                "removed": r.removed,
+                "entities": r.desired,
+                "exposed_now": r.exposed,
+                "error": r.error,
+            }
+
         return {
             "dry_run": self.dry_run,
             "at": self.at.isoformat(),
-            "assistants": {
-                a: {
-                    "count": r.count,
-                    "estimated_tokens": estimated_tokens(r.count),
-                    "refused": r.refused,
-                    "added": r.added,
-                    "removed": r.removed,
-                    "entities": r.desired,
-                    "exposed_now": r.exposed,
-                }
-                for a, r in self.assistants.items()
+            "assistants": {a: target_dict(r) for a, r in self.assistants.items()},
+            "actions": {
+                type_id: {t: target_dict(r) for t, r in targets.items()}
+                for type_id, targets in self.actions.items()
+                if type_id != EXPOSE
             },
             "rules": {
                 self.rule_names.get(rid, rid): count
                 for rid, count in self.by_rule.items()
             },
             "blocked": self.blocked,
+            "dormant": {
+                self.rule_names.get(rid, rid): types
+                for rid, types in self.dormant.items()
+            },
         }
 
 
@@ -125,6 +148,15 @@ class ExposureManager:
         self.entry = entry
         self.last: ApplyResult | None = None
         self._lock = asyncio.Lock()
+        self.registry: ActionRegistry = async_get_registry(hass)
+        self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.state")
+        self._rules_store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.rules")
+        self._rules: list[dict[str, Any]] = []
+        # Remembered between runs: the last selection of edge targets, and
+        # state targets we have applied, so removing the last rule that named
+        # a target still cleans it up.
+        self._edge: dict[str, dict[str, list[str]]] = {}
+        self._seen: dict[str, list[str]] = {}
         self._unsubs: list[Callable[[], None]] = []
         self._state_unsub: Callable[[], None] | None = None
         self._debouncer = Debouncer(
@@ -138,9 +170,34 @@ class ExposureManager:
     # ------------------------------------------------------------- config
 
     @property
+    def rules_raw(self) -> list[dict[str, Any]]:
+        """The stored rules as plain dicts (copies; edit and pass to async_set_rules)."""
+        return [dict(r) for r in self._rules]
+
+    async def _load_rules(self) -> None:
+        saved = await self._rules_store.async_load()
+        if saved is not None:
+            self._rules = list(saved.get("rules", []))
+            return
+        # First run since rules moved out of the config entry's options.
+        legacy = self.entry.options.get(CONF_RULES)
+        self._rules = list(legacy or [])
+        await self._rules_store.async_save({"rules": self._rules})
+        if legacy is not None:
+            options = {k: v for k, v in self.entry.options.items() if k != CONF_RULES}
+            self.hass.config_entries.async_update_entry(self.entry, options=options)
+
+    async def async_set_rules(self, rules: list[dict[str, Any]]) -> None:
+        """Replace all rules, persist them and re-evaluate soon."""
+        self._rules = [dict(r) for r in rules]
+        await self._rules_store.async_save({"rules": self._rules})
+        self._track_group_states()
+        self._debouncer.async_schedule_call()
+
+    @property
     def rules(self) -> list[Rule]:
         out = []
-        for raw in self.entry.options.get(CONF_RULES, []):
+        for raw in self._rules:
             try:
                 out.append(Rule.from_dict(raw))
             except (KeyError, TypeError, ValueError):
@@ -154,6 +211,11 @@ class ExposureManager:
     # ---------------------------------------------------------- lifecycle
 
     async def async_start(self) -> None:
+        await self._load_rules()
+        saved = await self._store.async_load() or {}
+        self._edge = saved.get("edge", {})
+        self._seen = saved.get("seen", {})
+        self._unsubs.append(self.registry.async_add_listener(self._on_registry_change))
         for event_type in _REGISTRY_EVENTS:
             self._unsubs.append(
                 self.hass.bus.async_listen(event_type, self._on_registry_event)
@@ -182,6 +244,10 @@ class ExposureManager:
         self._debouncer.async_cancel()
 
     # ------------------------------------------------------------ triggers
+
+    @callback
+    def _on_registry_change(self) -> None:
+        self._debouncer.async_schedule_call()
 
     @callback
     def _on_started(self, _event: Event) -> None:
@@ -235,23 +301,32 @@ class ExposureManager:
 
     # --------------------------------------------------------------- apply
 
-    def _current_exposed(self, assistant: str) -> set[str]:
+    def _specs(self, settings: Settings) -> dict[str, ActionSpec]:
+        """Action types that may run: built in, or third-party when allowed."""
         return {
-            entity_id
-            for entity_id, options in async_get_assistant_settings(
-                self.hass, assistant
-            ).items()
-            if options.get("should_expose")
+            type_id: action.spec()
+            for type_id, action in self.registry.types.items()
+            if self.registry.is_builtin(type_id) or settings.allow_third_party_actions
         }
 
     def compute_plan(self) -> tuple[Plan, list[Rule], Settings]:
         rules = self.rules
         settings = self.settings
         facts = build_facts(self.hass, settings, self._group_ids(rules))
-        return evaluate(rules, facts, settings), rules, settings
+        plan = evaluate(
+            rules,
+            facts,
+            settings,
+            specs=self._specs(settings),
+            extra_managed=self._seen,
+        )
+        return plan, rules, settings
+
+    async def _save_state(self) -> None:
+        await self._store.async_save({"edge": self._edge, "seen": self._seen})
 
     async def async_apply(self, dry_run: bool | None = None) -> ApplyResult:
-        """Recompute the plan and make exposure match it."""
+        """Recompute the plan and make every action's targets match it."""
         async with self._lock:
             plan, rules, settings = self.compute_plan()
             dry = settings.dry_run if dry_run is None else dry_run
@@ -262,67 +337,140 @@ class ExposureManager:
                 by_rule={rid: len(ids) for rid, ids in plan.by_rule.items()},
                 rule_names={r.id: r.name for r in rules},
                 blocked=dict(plan.blocked),
+                dormant={rid: sorted(t) for rid, t in plan.dormant.items()},
             )
+            _ = result.assistants  # expose is always reported, even when empty
 
-            for assistant in sorted(plan.managed):
-                desired = plan.desired.get(assistant, set())
-                current = self._current_exposed(assistant)
-                changes = plan_changes(current, desired, settings.max_exposed)
-                ares = AssistantResult(
-                    assistant=assistant,
-                    desired=sorted(desired),
-                    added=sorted(changes.add),
-                    removed=sorted(changes.remove),
-                    refused=changes.refused,
-                    exposed=sorted(current),
-                )
-                result.assistants[assistant] = ares
-
-                issue_id = f"{ISSUE_TOO_MANY}_{assistant}"
-                if changes.refused:
-                    # Fail safe: leave exposure as it is rather than blow past
-                    # the size a small model can hold.
-                    ares.added, ares.removed = [], []
-                    if not dry:
-                        ir.async_create_issue(
-                            self.hass,
-                            DOMAIN,
-                            issue_id,
-                            is_fixable=False,
-                            severity=ir.IssueSeverity.WARNING,
-                            translation_key=ISSUE_TOO_MANY,
-                            translation_placeholders={
-                                "assistant": ASSISTANT_LABELS.get(assistant, assistant),
-                                "count": str(changes.desired_count),
-                                "max": str(settings.max_exposed),
-                            },
-                        )
-                    _LOGGER.warning(
-                        "PropSense refused to expose %d entities to %s (limit %d); "
-                        "exposure left unchanged",
-                        changes.desired_count,
-                        assistant,
-                        settings.max_exposed,
-                    )
+            state_changed = False
+            for type_id in sorted(plan.managed_targets):
+                action = self.registry.get(type_id)
+                if action is None:
                     continue
-
-                if not dry:
-                    ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-                    for entity_id in ares.added:
-                        async_expose_entity(self.hass, assistant, entity_id, True)
-                    for entity_id in ares.removed:
-                        async_expose_entity(self.hass, assistant, entity_id, False)
-                    ares.exposed = sorted(desired)
-                    if ares.added or ares.removed:
-                        _LOGGER.info(
-                            "PropSense %s: +%d -%d (now %d exposed)",
-                            assistant,
-                            len(ares.added),
-                            len(ares.removed),
-                            len(desired),
+                results = result.actions.setdefault(type_id, {})
+                for target in sorted(plan.managed_targets[type_id]):
+                    desired = plan.targets[type_id].get(target, set())
+                    try:
+                        tres, changed = await self._apply_target(
+                            action, target, desired, settings, dry
                         )
+                    except Exception as err:  # a provider must not break the rest
+                        _LOGGER.exception(
+                            "PropSense action %s failed for target %s", type_id, target
+                        )
+                        tres = TargetResult(
+                            target=target, desired=sorted(desired), error=str(err)
+                        )
+                        changed = False
+                    results[target] = tres
+                    state_changed |= changed
 
             if not dry:
+                if state_changed:
+                    await self._save_state()
                 self.last = result
                 async_dispatcher_send(self.hass, SIGNAL_UPDATED)
             return result
+
+    async def _apply_target(
+        self,
+        action,
+        target: str,
+        desired: set[str],
+        settings: Settings,
+        dry: bool,
+    ) -> tuple[TargetResult, bool]:
+        """Apply one target. Returns its result and whether stored state changed."""
+        type_id = action.type_id
+
+        if action.mode == "edge":
+            previous = self._edge.get(type_id, {}).get(target)
+            if previous is None:
+                # First sight: record the selection, fire nothing.
+                add, remove = set(), set()
+            else:
+                add, remove = desired - set(previous), set(previous) - desired
+            tres = TargetResult(
+                target=target,
+                desired=sorted(desired),
+                added=sorted(add),
+                removed=sorted(remove),
+                exposed=sorted(desired if previous is not None else []),
+            )
+            if dry:
+                return tres, False
+            if add or remove:
+                await action.async_apply(target, add, remove)
+            self._edge.setdefault(type_id, {})[target] = sorted(desired)
+            tres.exposed = sorted(desired)
+            return tres, previous is None or bool(add or remove)
+
+        current = await action.async_current(target)
+        changes = plan_changes(current, desired, settings.max_exposed)
+        tres = TargetResult(
+            target=target,
+            desired=sorted(desired),
+            added=sorted(changes.add),
+            removed=sorted(changes.remove),
+            refused=changes.refused,
+            exposed=sorted(current),
+        )
+
+        issue_id = (
+            f"{ISSUE_TOO_MANY}_{target}"
+            if type_id == EXPOSE
+            else f"{ISSUE_TOO_MANY}_{type_id}_{target}"
+        )
+        label = action.target_label(target)
+        if changes.refused:
+            # Fail safe: leave the target as it is rather than blow past the
+            # size a small model can hold.
+            tres.added, tres.removed = [], []
+            if not dry:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=ISSUE_TOO_MANY,
+                    translation_placeholders={
+                        "assistant": label,
+                        "count": str(changes.desired_count),
+                        "max": str(settings.max_exposed),
+                    },
+                )
+            _LOGGER.warning(
+                "PropSense refused to apply %d entities to %s (limit %d); "
+                "left unchanged",
+                changes.desired_count,
+                label,
+                settings.max_exposed,
+            )
+            return tres, False
+
+        if dry:
+            return tres, False
+
+        ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        if changes.add or changes.remove:
+            await action.async_apply(target, set(changes.add), set(changes.remove))
+            _LOGGER.info(
+                "PropSense %s %s: +%d -%d (now %d)",
+                type_id,
+                label,
+                len(changes.add),
+                len(changes.remove),
+                len(desired),
+            )
+        tres.exposed = sorted(desired)
+
+        changed = False
+        if type_id != EXPOSE:
+            # Remember the target while it has anything, so deleting the last
+            # rule that names it still removes what we added.
+            seen = set(self._seen.get(type_id, []))
+            new = seen | {target} if desired else seen - {target}
+            if new != seen:
+                self._seen[type_id] = sorted(new)
+                changed = True
+        return tres, changed

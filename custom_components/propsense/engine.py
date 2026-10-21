@@ -19,7 +19,7 @@ is not exposed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 # Rough prompt cost of one exposed entity for an LLM conversation agent, from
 # a measured deployment (303 exposed entities produced a ~9,050 token request
@@ -117,6 +117,52 @@ class Selector:
         return True
 
 
+EXPOSE = "expose"
+DEFAULT_ASSISTANTS = frozenset({"conversation"})
+
+
+@dataclass(frozen=True)
+class Action:
+    """One thing a rule does to the entities it selects.
+
+    ``type`` names an action type (``expose`` is built in, others are
+    registered by other integrations); ``config`` is that type's own options.
+    """
+
+    type: str
+    config: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Action":
+        return cls(type=str(data["type"]), config=dict(data.get("config") or {}))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.type, "config": dict(self.config)}
+
+
+@dataclass(frozen=True)
+class ActionSpec:
+    """What the pure engine needs to know about an action type.
+
+    ``mode`` is ``state`` (reconciled: unselected entities are removed from
+    each target) or ``edge`` (fires when an entity enters or leaves a target's
+    selection). ``targets`` maps an action's config to the targets it addresses,
+    for example assistants or child instances.
+    """
+
+    type_id: str
+    targets: Callable[[dict[str, Any]], frozenset[str]]
+    mode: str = "state"
+    respects_blocked_domains: bool = True
+
+
+def _expose_targets(config: dict[str, Any]) -> frozenset[str]:
+    return _fset(config.get("assistants")) or DEFAULT_ASSISTANTS
+
+
+EXPOSE_SPEC = ActionSpec(type_id=EXPOSE, targets=_expose_targets)
+
+
 @dataclass(frozen=True)
 class Rule:
     id: str
@@ -124,19 +170,23 @@ class Rule:
     enabled: bool = True
     include: Selector = field(default_factory=Selector)
     exclude: Selector = field(default_factory=Selector)
-    # Action: expose matching entities to these assistants (for example
-    # "conversation", "cloud.alexa", "cloud.google_assistant").
-    assistants: frozenset[str] = frozenset({"conversation"})
+    actions: tuple[Action, ...] = (Action(EXPOSE, {"assistants": ["conversation"]}),)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Rule":
+        if "actions" in data:
+            actions = tuple(Action.from_dict(a) for a in data["actions"] or [])
+        else:
+            # 0.1 rules carried only `assistants`: an implicit expose action.
+            assistants = _fset(data.get("assistants")) or DEFAULT_ASSISTANTS
+            actions = (Action(EXPOSE, {"assistants": sorted(assistants)}),)
         return cls(
             id=str(data["id"]),
             name=str(data.get("name") or data["id"]),
             enabled=bool(data.get("enabled", True)),
             include=Selector.from_dict(data.get("include")),
             exclude=Selector.from_dict(data.get("exclude")),
-            assistants=_fset(data.get("assistants")) or frozenset({"conversation"}),
+            actions=actions,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -146,8 +196,17 @@ class Rule:
             "enabled": self.enabled,
             "include": self.include.to_dict(),
             "exclude": self.exclude.to_dict(),
-            "assistants": sorted(self.assistants),
+            "actions": [a.to_dict() for a in self.actions],
         }
+
+    @property
+    def assistants(self) -> frozenset[str]:
+        """Assistants this rule exposes to (its ``expose`` actions)."""
+        out: set[str] = set()
+        for a in self.actions:
+            if a.type == EXPOSE:
+                out |= _expose_targets(a.config)
+        return frozenset(out)
 
     def selects(self, facts: EntityFacts) -> bool:
         return self.include.matches(facts) and not self.exclude.matches(facts)
@@ -168,6 +227,9 @@ class Settings:
     inherit_device_labels: bool = True
     inherit_area_labels: bool = False
     dry_run: bool = False
+    # Third-party action types (registered by other integrations) stay dormant
+    # until this is on, because they can do more than change exposure.
+    allow_third_party_actions: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Settings":
@@ -189,6 +251,11 @@ class Settings:
                 data.get("inherit_area_labels", defaults.inherit_area_labels)
             ),
             dry_run=bool(data.get("dry_run", defaults.dry_run)),
+            allow_third_party_actions=bool(
+                data.get(
+                    "allow_third_party_actions", defaults.allow_third_party_actions
+                )
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -199,6 +266,7 @@ class Settings:
             "inherit_device_labels": self.inherit_device_labels,
             "inherit_area_labels": self.inherit_area_labels,
             "dry_run": self.dry_run,
+            "allow_third_party_actions": self.allow_third_party_actions,
         }
 
 
@@ -206,41 +274,78 @@ class Settings:
 class Plan:
     """What the rules want, before anything is applied."""
 
-    # assistant -> entity ids that should be exposed
-    desired: dict[str, set[str]] = field(default_factory=dict)
+    # action type -> target -> entity ids the target should have
+    targets: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    # action type -> targets PropSense manages (rule targets, the setting for
+    # expose, and targets remembered from earlier runs)
+    managed_targets: dict[str, set[str]] = field(default_factory=dict)
     # rule id -> entity ids it selected (after excludes and the block list)
     by_rule: dict[str, set[str]] = field(default_factory=dict)
     # entity id -> why a selected entity was dropped
     blocked: dict[str, str] = field(default_factory=dict)
-    # assistants PropSense manages (rule targets plus the setting)
-    managed: set[str] = field(default_factory=set)
+    # rule id -> action types that could not be evaluated (no provider, or
+    # third-party actions are not allowed)
+    dormant: dict[str, set[str]] = field(default_factory=dict)
+
+    @property
+    def desired(self) -> dict[str, set[str]]:
+        """assistant -> entity ids to expose (the built-in action)."""
+        return self.targets.get(EXPOSE, {})
+
+    @property
+    def managed(self) -> set[str]:
+        """Assistants PropSense manages."""
+        return self.managed_targets.get(EXPOSE, set())
 
 
 def evaluate(
-    rules: Iterable[Rule], facts: Iterable[EntityFacts], settings: Settings
+    rules: Iterable[Rule],
+    facts: Iterable[EntityFacts],
+    settings: Settings,
+    specs: Mapping[str, ActionSpec] | None = None,
+    extra_managed: Mapping[str, Iterable[str]] | None = None,
 ) -> Plan:
-    """Compute what should be exposed. Pure: same inputs, same plan."""
+    """Compute what should happen. Pure: same inputs, same plan.
+
+    ``specs`` are the action types that may run; actions of any other type are
+    reported as dormant and never touch anything.
+    """
+    specs = {EXPOSE: EXPOSE_SPEC} if specs is None else specs
     rules = [r for r in rules if r.enabled]
     facts = list(facts)
 
-    plan = Plan(managed=set(settings.managed_assistants))
-    for rule in rules:
-        plan.managed |= set(rule.assistants)
-        plan.by_rule[rule.id] = set()
+    plan = Plan()
+    plan.managed_targets[EXPOSE] = set(settings.managed_assistants)
+    for type_id, targets in (extra_managed or {}).items():
+        if type_id in specs:
+            plan.managed_targets.setdefault(type_id, set()).update(targets)
 
-    for assistant in plan.managed:
-        plan.desired[assistant] = set()
+    # (rule, spec, targets) for every runnable action
+    runnable: list[tuple[Rule, ActionSpec, frozenset[str]]] = []
+    for rule in rules:
+        plan.by_rule[rule.id] = set()
+        for action in rule.actions:
+            spec = specs.get(action.type)
+            if spec is None:
+                plan.dormant.setdefault(rule.id, set()).add(action.type)
+                continue
+            targets = spec.targets(action.config)
+            plan.managed_targets.setdefault(spec.type_id, set()).update(targets)
+            runnable.append((rule, spec, targets))
+
+    for type_id, managed in plan.managed_targets.items():
+        plan.targets[type_id] = {target: set() for target in managed}
 
     for f in facts:
-        for rule in rules:
+        for rule, spec, targets in runnable:
             if not rule.selects(f):
                 continue
-            if f.domain in settings.blocked_domains:
+            if spec.respects_blocked_domains and f.domain in settings.blocked_domains:
                 plan.blocked[f.entity_id] = f"domain '{f.domain}' is blocked"
                 continue
             plan.by_rule[rule.id].add(f.entity_id)
-            for assistant in rule.assistants:
-                plan.desired[assistant].add(f.entity_id)
+            for target in targets:
+                plan.targets[spec.type_id][target].add(f.entity_id)
     return plan
 
 

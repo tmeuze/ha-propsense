@@ -23,6 +23,7 @@ from homeassistant.helpers import entity_registry as er, selector
 
 from .const import ASSISTANT_LABELS, ASSISTANTS, CONF_RULES, CONF_SETTINGS, DOMAIN
 from .engine import (
+    EXPOSE,
     SELECTOR_FIELDS,
     Rule,
     Selector,
@@ -91,7 +92,7 @@ class PropSenseConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title="PropSense",
                 data={},
-                options={CONF_RULES: [], CONF_SETTINGS: Settings().to_dict()},
+                options={CONF_SETTINGS: Settings().to_dict()},
             )
         return self.async_show_form(step_id="user")
 
@@ -112,7 +113,7 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
 
     @property
     def _rules(self) -> list[dict[str, Any]]:
-        return [dict(r) for r in self.config_entry.options.get(CONF_RULES, [])]
+        return self.config_entry.runtime_data.rules_raw
 
     @property
     def _settings(self) -> Settings:
@@ -124,12 +125,13 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
         found |= {s.domain for s in self.hass.states.async_all()}
         return sorted(found)
 
-    def _save(self, rules: list[dict[str, Any]], settings: Settings | None = None):
+    async def _save(
+        self, rules: list[dict[str, Any]], settings: Settings | None = None
+    ):
+        # Rules live in PropSense's own store; options hold the settings.
+        await self.config_entry.runtime_data.async_set_rules(rules)
         return self.async_create_entry(
-            data={
-                CONF_RULES: rules,
-                CONF_SETTINGS: (settings or self._settings).to_dict(),
-            }
+            data={CONF_SETTINGS: (settings or self._settings).to_dict()}
         )
 
     # -------------------------------------------------------------- menu
@@ -194,11 +196,11 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
         for r in rules:
             if r["id"] == self._rule_id:
                 r["enabled"] = not r.get("enabled", True)
-        return self._save(rules)
+        return await self._save(rules)
 
     async def async_step_delete_rule(self, user_input=None) -> Any:
         rules = [r for r in self._rules if r["id"] != self._rule_id]
-        return self._save(rules)
+        return await self._save(rules)
 
     async def async_step_rule_include(
         self, user_input: dict[str, Any] | None = None, rule: dict[str, Any] | None = None
@@ -267,10 +269,22 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
             exclude = _selector_from_input(
                 "exclude", user_input, current.exclude if current else Selector()
             )
+            assistants = self._draft.pop("assistants")
+            # This form only edits the expose action; keep any other actions
+            # the rule has (they are managed elsewhere).
+            others = (
+                [a.to_dict() for a in current.actions if a.type != EXPOSE]
+                if current
+                else []
+            )
             new_rule = {
                 "id": self._rule_id or uuid.uuid4().hex[:8],
                 **self._draft,
                 "exclude": exclude.to_dict(),
+                "actions": [
+                    {"type": EXPOSE, "config": {"assistants": sorted(assistants)}},
+                    *others,
+                ],
             }
             rules = self._rules
             if self._rule_id:
@@ -278,7 +292,7 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
                 rules = [new_rule if r["id"] == self._rule_id else r for r in rules]
             else:
                 rules.append(new_rule)
-            return self._save(rules)
+            return await self._save(rules)
 
         schema = _selector_fields(
             "exclude", current.exclude if current else Selector(), self._domains()
@@ -303,9 +317,12 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
                     "inherit_device_labels": user_input["inherit_device_labels"],
                     "inherit_area_labels": user_input["inherit_area_labels"],
                     "dry_run": user_input["dry_run"],
+                    "allow_third_party_actions": user_input[
+                        "allow_third_party_actions"
+                    ],
                 }
             )
-            return self._save(self._rules, new)
+            return await self._save(self._rules, new)
 
         schema = vol.Schema(
             {
@@ -351,6 +368,10 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
                 vol.Required(
                     "dry_run", default=current.dry_run
                 ): selector.BooleanSelector(),
+                vol.Required(
+                    "allow_third_party_actions",
+                    default=current.allow_third_party_actions,
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="settings", data_schema=schema)
@@ -384,6 +405,25 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
             lines.append(
                 "**Blocked** (matched a rule but never exposed): "
                 + ", ".join(sorted(result.blocked))
+            )
+        for type_id, targets in sorted(result.actions.items()):
+            if type_id == EXPOSE:
+                continue
+            for target, res in sorted(targets.items()):
+                err = f" (error: {res.error})" if res.error else ""
+                lines.append(
+                    f"**{type_id} → {target}**: {res.count} entities. "
+                    f"Adds {len(res.added)}, removes {len(res.removed)}.{err}"
+                )
+        if result.dormant:
+            lines.append("")
+            lines.append(
+                "**Dormant** (action type unavailable or third-party actions "
+                "not allowed): "
+                + ", ".join(
+                    f"{result.rule_names.get(rid, rid)} ({', '.join(types)})"
+                    for rid, types in sorted(result.dormant.items())
+                )
             )
         if not lines:
             lines.append("No rules yet.")
