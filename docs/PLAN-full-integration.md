@@ -80,7 +80,7 @@ All admin only, under `propsense/`:
 4. **Extension API docs and fake-provider contract tests.**
 5. **Release 0.2:** README update, CI (including a frontend build check), live install per the dry-run procedure.
 
-Later: built-in edge actions (labels, aliases, call service), YAML import/export, token budget display.
+Use cases driving the design are listed in the README. Later: built-in edge actions (labels, aliases, call service), YAML import/export, token budget display.
 
 ## Decisions (2026-10-21)
 
