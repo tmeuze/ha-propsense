@@ -1,9 +1,16 @@
 {
   "domain": "propsense",
   "name": "PropSense",
-  "codeowners": ["@tmeuze"],
+  "codeowners": [
+    "@tmeuze"
+  ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/tmeuze/ha-propsense#readme",
   "integration_type": "service",
   "iot_class": "calculated",

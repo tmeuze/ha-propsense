@@ -375,3 +375,42 @@ def plan_changes(current: set[str], desired: set[str], max_exposed: int) -> Chan
 
 def estimated_tokens(count: int) -> int:
     return count * TOKENS_PER_ENTITY
+
+
+def explain(
+    rules: Iterable[Rule],
+    f: EntityFacts,
+    settings: Settings,
+    specs: Mapping[str, ActionSpec] | None = None,
+) -> list[dict[str, Any]]:
+    """Why is (or isn't) one entity selected? One entry per rule."""
+    specs = {EXPOSE: EXPOSE_SPEC} if specs is None else specs
+    out: list[dict[str, Any]] = []
+    for rule in rules:
+        included = rule.include.matches(f)
+        excluded = rule.exclude.matches(f)
+        actions = []
+        for action in rule.actions:
+            spec = specs.get(action.type)
+            if spec is None:
+                status, targets = "dormant", []
+            else:
+                targets = sorted(spec.targets(action.config))
+                if not (rule.enabled and included and not excluded):
+                    status = "not selected"
+                elif spec.respects_blocked_domains and f.domain in settings.blocked_domains:
+                    status = "blocked"
+                else:
+                    status = "applies"
+            actions.append({"type": action.type, "targets": targets, "status": status})
+        out.append(
+            {
+                "rule_id": rule.id,
+                "name": rule.name,
+                "enabled": rule.enabled,
+                "included": included,
+                "excluded": excluded,
+                "actions": actions,
+            }
+        )
+    return out
