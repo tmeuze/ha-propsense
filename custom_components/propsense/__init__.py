@@ -18,8 +18,11 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.setup import async_setup_component
 
+from .actions import ExposeAction
+from .api import async_get_registry
 from .const import DOMAIN
 from .manager import ExposureManager
 
@@ -38,6 +41,16 @@ def _manager(hass: HomeAssistant) -> ExposureManager:
     if not entries:
         raise ServiceValidationError("PropSense is not set up")
     return entries[0].runtime_data
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Create the action registry and register the built-in action.
+
+    This runs before any config entry, so other integrations can register
+    action types as soon as they load.
+    """
+    async_get_registry(hass).register(ExposeAction(hass), builtin=True)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PropSenseConfigEntry) -> bool:

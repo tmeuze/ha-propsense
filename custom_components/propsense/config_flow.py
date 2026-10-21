@@ -23,6 +23,7 @@ from homeassistant.helpers import entity_registry as er, selector
 
 from .const import ASSISTANT_LABELS, ASSISTANTS, CONF_RULES, CONF_SETTINGS, DOMAIN
 from .engine import (
+    EXPOSE,
     SELECTOR_FIELDS,
     Rule,
     Selector,
@@ -267,10 +268,22 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
             exclude = _selector_from_input(
                 "exclude", user_input, current.exclude if current else Selector()
             )
+            assistants = self._draft.pop("assistants")
+            # This form only edits the expose action; keep any other actions
+            # the rule has (they are managed elsewhere).
+            others = (
+                [a.to_dict() for a in current.actions if a.type != EXPOSE]
+                if current
+                else []
+            )
             new_rule = {
                 "id": self._rule_id or uuid.uuid4().hex[:8],
                 **self._draft,
                 "exclude": exclude.to_dict(),
+                "actions": [
+                    {"type": EXPOSE, "config": {"assistants": sorted(assistants)}},
+                    *others,
+                ],
             }
             rules = self._rules
             if self._rule_id:
@@ -303,6 +316,9 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
                     "inherit_device_labels": user_input["inherit_device_labels"],
                     "inherit_area_labels": user_input["inherit_area_labels"],
                     "dry_run": user_input["dry_run"],
+                    "allow_third_party_actions": user_input[
+                        "allow_third_party_actions"
+                    ],
                 }
             )
             return self._save(self._rules, new)
@@ -351,6 +367,10 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
                 vol.Required(
                     "dry_run", default=current.dry_run
                 ): selector.BooleanSelector(),
+                vol.Required(
+                    "allow_third_party_actions",
+                    default=current.allow_third_party_actions,
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="settings", data_schema=schema)
@@ -384,6 +404,25 @@ class PropSenseOptionsFlow(OptionsFlowWithReload):
             lines.append(
                 "**Blocked** (matched a rule but never exposed): "
                 + ", ".join(sorted(result.blocked))
+            )
+        for type_id, targets in sorted(result.actions.items()):
+            if type_id == EXPOSE:
+                continue
+            for target, res in sorted(targets.items()):
+                err = f" (error: {res.error})" if res.error else ""
+                lines.append(
+                    f"**{type_id} → {target}**: {res.count} entities. "
+                    f"Adds {len(res.added)}, removes {len(res.removed)}.{err}"
+                )
+        if result.dormant:
+            lines.append("")
+            lines.append(
+                "**Dormant** (action type unavailable or third-party actions "
+                "not allowed): "
+                + ", ".join(
+                    f"{result.rule_names.get(rid, rid)} ({', '.join(types)})"
+                    for rid, types in sorted(result.dormant.items())
+                )
             )
         if not lines:
             lines.append("No rules yet.")

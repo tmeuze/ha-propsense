@@ -1,5 +1,6 @@
 """Policy tests for the pure rules engine (no Home Assistant needed)."""
 from custom_components.propsense.engine import (
+    EXPOSE_SPEC,
     EntityFacts,
     Rule,
     Selector,
@@ -196,3 +197,86 @@ def test_settings_defaults_block_the_sensitive_domains():
 
 def test_token_estimate():
     assert estimated_tokens(60) == 60 * TOKENS_PER_ENTITY
+
+
+# ---------------------------------------------------------------- actions
+
+from custom_components.propsense.engine import Action, ActionSpec  # noqa: E402
+
+GRANT = ActionSpec(
+    type_id="grant",
+    targets=lambda cfg: frozenset(cfg.get("children", [])),
+    respects_blocked_domains=False,
+)
+
+
+def action_rule(rid, include, actions):
+    return Rule.from_dict(
+        {"id": rid, "name": rid, "include": include, "actions": actions}
+    )
+
+
+def test_legacy_assistants_become_an_expose_action():
+    r = Rule.from_dict({"id": "x", "name": "x", "assistants": ["cloud.alexa"]})
+    assert r.actions == (Action("expose", {"assistants": ["cloud.alexa"]}),)
+    assert r.assistants == frozenset({"cloud.alexa"})
+    assert Rule.from_dict(r.to_dict()) == r
+
+
+def test_explicit_empty_actions_do_nothing():
+    r = Rule.from_dict(
+        {"id": "x", "name": "x", "include": {"labels": ["expose_novak"]}, "actions": []}
+    )
+    plan = evaluate([r], ENTITIES, Settings())
+    assert wanted(plan) == set()
+    assert plan.by_rule["x"] == set()
+
+
+def test_actions_of_unknown_type_are_dormant_and_touch_nothing():
+    r = action_rule(
+        "g",
+        {"labels": ["expose_novak"]},
+        [{"type": "grant", "config": {"children": ["kid1"]}}],
+    )
+    plan = evaluate([r], ENTITIES, Settings())  # only built-in specs
+    assert plan.dormant == {"g": {"grant"}}
+    assert "grant" not in plan.targets
+    assert plan.by_rule["g"] == set()
+
+
+def test_third_party_targets_and_block_list_opt_out():
+    r = action_rule(
+        "g",
+        {"labels": ["expose_novak"]},
+        [{"type": "grant", "config": {"children": ["kid1"]}}],
+    )
+    plan = evaluate([r], ENTITIES, Settings(), specs={"grant": GRANT})
+    # lock.front is allowed because this action type opted out of the block list
+    assert plan.targets["grant"]["kid1"] == {
+        "light.kitchen",
+        "light.bedroom",
+        "lock.front",
+    }
+    assert plan.blocked == {}
+
+
+def test_one_rule_can_run_several_actions():
+    r = action_rule(
+        "both",
+        {"labels": ["expose_novak"], "domains": ["light"]},
+        [
+            {"type": "expose", "config": {"assistants": ["conversation"]}},
+            {"type": "grant", "config": {"children": ["kid1"]}},
+        ],
+    )
+    plan = evaluate([r], ENTITIES, Settings(), specs={"expose": EXPOSE_SPEC, "grant": GRANT})
+    both = {"light.kitchen", "light.bedroom"}
+    assert plan.desired["conversation"] == both
+    assert plan.targets["grant"]["kid1"] == both
+
+
+def test_remembered_targets_stay_managed_without_rules():
+    plan = evaluate(
+        [], ENTITIES, Settings(), specs={"grant": GRANT}, extra_managed={"grant": ["kid1"]}
+    )
+    assert plan.targets["grant"] == {"kid1": set()}

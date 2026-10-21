@@ -92,12 +92,14 @@
           "max_exposed": "Most entities to expose per assistant (0 for no limit)",
           "inherit_device_labels": "Entities inherit their device's labels",
           "inherit_area_labels": "Entities inherit their area's labels",
-          "dry_run": "Dry run (compute, but change nothing)"
+          "dry_run": "Dry run (compute, but change nothing)",
+          "allow_third_party_actions": "Allow third-party actions"
         },
         "data_description": {
           "managed_assistants": "For these assistants PropSense is authoritative: anything its rules do not select is un-exposed, including entities ticked by hand.",
           "blocked_domains": "Safety list. Matching entities are reported but never exposed, whatever a rule says.",
-          "max_exposed": "If the rules would expose more than this, PropSense changes nothing and raises a repair. Small voice models cope with roughly 60 to 100 entities."
+          "max_exposed": "If the rules would expose more than this, PropSense changes nothing and raises a repair. Small voice models cope with roughly 60 to 100 entities.",
+          "allow_third_party_actions": "Warning: other integrations can register actions that change things beyond voice exposure, such as granting entities to other Home Assistant instances. Rules using them stay dormant until you turn this on. Only enable it for integrations you trust."
         }
       },
       "preview": {
