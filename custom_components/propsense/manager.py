@@ -53,6 +53,7 @@ from .engine import (
     Settings,
     estimated_tokens,
     evaluate,
+    explain,
     plan_changes,
 )
 from .snapshot import build_facts
@@ -101,6 +102,8 @@ class ApplyResult:
     rule_names: dict[str, str] = field(default_factory=dict)
     blocked: dict[str, str] = field(default_factory=dict)
     dormant: dict[str, list[str]] = field(default_factory=dict)
+    # rule id -> entity ids it selected (not serialised: can be large)
+    rule_entities: dict[str, set[str]] = field(default_factory=dict)
 
     @property
     def assistants(self) -> dict[str, TargetResult]:
@@ -187,6 +190,14 @@ class ExposureManager:
             options = {k: v for k, v in self.entry.options.items() if k != CONF_RULES}
             self.hass.config_entries.async_update_entry(self.entry, options=options)
 
+    async def async_set_settings(self, settings: dict[str, Any]) -> None:
+        """Persist settings. Reloads, since managed assistants own sensors."""
+        merged = Settings.from_dict({**self.settings.to_dict(), **settings})
+        self.hass.config_entries.async_update_entry(
+            self.entry, options={**self.entry.options, CONF_SETTINGS: merged.to_dict()}
+        )
+        self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
+
     async def async_set_rules(self, rules: list[dict[str, Any]]) -> None:
         """Replace all rules, persist them and re-evaluate soon."""
         self._rules = [dict(r) for r in rules]
@@ -196,8 +207,12 @@ class ExposureManager:
 
     @property
     def rules(self) -> list[Rule]:
+        return self._parse(self._rules)
+
+    @staticmethod
+    def _parse(raw_rules: list[dict[str, Any]]) -> list[Rule]:
         out = []
-        for raw in self._rules:
+        for raw in raw_rules:
             try:
                 out.append(Rule.from_dict(raw))
             except (KeyError, TypeError, ValueError):
@@ -309,8 +324,10 @@ class ExposureManager:
             if self.registry.is_builtin(type_id) or settings.allow_third_party_actions
         }
 
-    def compute_plan(self) -> tuple[Plan, list[Rule], Settings]:
-        rules = self.rules
+    def compute_plan(
+        self, rules_override: list[dict[str, Any]] | None = None
+    ) -> tuple[Plan, list[Rule], Settings]:
+        rules = self.rules if rules_override is None else self._parse(rules_override)
         settings = self.settings
         facts = build_facts(self.hass, settings, self._group_ids(rules))
         plan = evaluate(
@@ -325,11 +342,41 @@ class ExposureManager:
     async def _save_state(self) -> None:
         await self._store.async_save({"edge": self._edge, "seen": self._seen})
 
-    async def async_apply(self, dry_run: bool | None = None) -> ApplyResult:
-        """Recompute the plan and make every action's targets match it."""
+    def explain(self, entity_id: str) -> dict[str, Any]:
+        """Why one entity is or isn't selected by each rule."""
+        rules = self.rules
+        settings = self.settings
+        facts = build_facts(self.hass, settings, self._group_ids(rules))
+        match = next((f for f in facts if f.entity_id == entity_id), None)
+        if match is None:
+            return {"found": False, "rules": []}
+        return {
+            "found": True,
+            "labels": sorted(match.labels),
+            "area_id": match.area_id,
+            "floor_id": match.floor_id,
+            "device_id": match.device_id,
+            "device_class": match.device_class,
+            "groups": sorted(match.groups),
+            "rules": explain(rules, match, settings, self._specs(settings)),
+        }
+
+    async def async_apply(
+        self,
+        dry_run: bool | None = None,
+        rules_override: list[dict[str, Any]] | None = None,
+    ) -> ApplyResult:
+        """Recompute the plan and make every action's targets match it.
+
+        ``rules_override`` evaluates unsaved rules (a draft) and implies a dry run.
+        """
         async with self._lock:
-            plan, rules, settings = self.compute_plan()
-            dry = settings.dry_run if dry_run is None else dry_run
+            plan, rules, settings = self.compute_plan(rules_override)
+            dry = (
+                True
+                if rules_override is not None
+                else settings.dry_run if dry_run is None else dry_run
+            )
 
             result = ApplyResult(
                 dry_run=dry,
@@ -338,6 +385,7 @@ class ExposureManager:
                 rule_names={r.id: r.name for r in rules},
                 blocked=dict(plan.blocked),
                 dormant={rid: sorted(t) for rid, t in plan.dormant.items()},
+                rule_entities=plan.by_rule,
             )
             _ = result.assistants  # expose is always reported, even when empty
 

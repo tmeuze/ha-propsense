@@ -24,6 +24,8 @@ from homeassistant.setup import async_setup_component
 from .actions import ExposeAction
 from .api import async_get_registry
 from .const import DOMAIN
+from .panel import async_register_panel, async_remove_panel
+from .websocket_api import async_register_commands
 from .manager import ExposureManager
 
 PLATFORMS = [Platform.SENSOR]
@@ -50,6 +52,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     action types as soon as they load.
     """
     async_get_registry(hass).register(ExposeAction(hass), builtin=True)
+    async_register_commands(hass)
     return True
 
 
@@ -63,6 +66,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PropSenseConfigEntry) ->
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await manager.async_start()
+
+    await async_register_panel(hass)
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESYNC):
 
@@ -91,4 +96,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: PropSenseConfigEntry) -
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_RESYNC)
         hass.services.async_remove(DOMAIN, SERVICE_PREVIEW)
+        async_remove_panel(hass)
     return unloaded

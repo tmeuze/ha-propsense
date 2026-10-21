@@ -1,1 +1,3 @@
 pytest-homeassistant-custom-component
+# the panel depends on the frontend integration, which needs this package
+home-assistant-frontend

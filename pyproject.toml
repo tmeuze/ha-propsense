@@ -1,6 +1,6 @@
 [project]
 name = "ha-propsense"
-version = "0.1.0"
+version = "0.2.0"
 description = "Home Assistant integration: rules and actions driven by labels and metadata"
 readme = "README.md"
 license = "MIT"
