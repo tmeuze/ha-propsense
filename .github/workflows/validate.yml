@@ -31,3 +31,19 @@ jobs:
           allow-prereleases: true
       - run: pip install -r requirements-test.txt
       - run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - name: Committed bundle is up to date
+        run: git diff --exit-code custom_components/propsense/frontend

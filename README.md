@@ -72,9 +72,14 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 
 ## Configure
 
-Settings → Devices & services → PropSense → **Configure**. The menu lets you add, edit, toggle and delete rules, edit settings, and **preview** what the current rules would change.
+Open **PropSense** in the sidebar (administrators only).
 
-Rules and settings are stored in the config entry options.
+- **Rules:** add, edit, enable or disable and delete rules. The editor shows a live preview of the entities a rule selects, and the prompt-token estimate if you expose them to an LLM agent.
+- **Status:** the last result per action and target, a **dry run** that shows what would be added or removed, and **Apply now**.
+- **Explain:** pick an entity and see which rules select it, which exclude it, and what each action would do.
+- **Settings:** managed assistants, blocked domains, the size guard, label inheritance, dry run, and whether third-party actions are allowed.
+
+Rules are stored in PropSense's own storage, and settings in the config entry options. The integration's **Configure** button still offers the older step-by-step flow for the same rules and settings.
 
 ### Services
 
@@ -93,9 +98,9 @@ On Home Assistant start, on registry changes (entity, device, area, floor, label
 
 With the single-source-of-truth model, an empty or wrong rule set un-exposes everything on the first apply.
 
-1. Turn on **dry run** in settings.
-2. Add your rules.
-3. Open **Preview** and check the exposed and un-exposed lists.
+1. Turn on **dry run** (the Rules page offers it while there are no rules).
+2. Add your rules and watch the live preview.
+3. Open **Status → Dry run** and check what would be added and removed.
 4. Turn dry run off.
 
 Mind your model's context budget too. Each exposed entity costs roughly 26 prompt tokens for an LLM conversation agent, so keep exposure small and curated. `max_exposed` is the guard rail.
@@ -107,6 +112,16 @@ python -m venv .venv
 .venv/bin/pip install -r requirements-test.txt
 .venv/bin/python -m pytest -q
 ```
+
+The panel is a Lit web component in `frontend/`. The built bundle is committed to `custom_components/propsense/frontend/` so HACS installs need no build step; CI fails if it is out of date.
+
+```bash
+cd frontend && npm ci && npm run build
+```
+
+### Extending PropSense
+
+Other integrations register action types through `custom_components/propsense/api.py` (see the docstring there). A provider subclasses `ActionType`, declares `dependencies: ["propsense"]`, and calls `async_register_action(hass, MyAction())`. Actions are either `state` (kept equal to the selection) or `edge` (fire when an entity enters or leaves it). They stay dormant until the user allows third-party actions in the settings.
 
 `engine.py` is pure policy with no Home Assistant imports. `snapshot.py` builds entity facts from the registries and `manager.py` applies the result.
 

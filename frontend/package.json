@@ -1,0 +1,14 @@
+{
+  "name": "propsense-panel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/panel.js --bundle --minify --format=esm --target=es2022 --outfile=../custom_components/propsense/frontend/propsense-panel.js"
+  },
+  "dependencies": {
+    "lit": "^3.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

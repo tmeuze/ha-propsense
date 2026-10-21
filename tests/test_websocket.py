@@ -130,3 +130,13 @@ async def test_non_admin_is_refused(hass, hass_ws_client, hass_read_only_access_
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id({"type": "propsense/overview"})
     assert (await client.receive_json())["error"]["code"] == "unauthorized"
+
+
+async def test_panel_is_registered_for_admins_and_removed_on_unload(hass):
+    entry = await setup(hass, [])
+    panel = hass.data["frontend_panels"]["propsense"]
+    assert panel.require_admin is True
+    assert panel.sidebar_title == "PropSense"
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert "propsense" not in hass.data["frontend_panels"]
