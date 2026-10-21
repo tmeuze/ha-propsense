@@ -109,10 +109,8 @@ async def test_removing_the_last_rule_revokes(hass, label):
     assert provider.held == {"kid1": {lamp}}
 
     manager = entry.runtime_data
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, "rules": []}
-    )
-    await manager.async_apply()
+    await manager.async_set_rules([])
+    await settle(hass)
     assert provider.held == {"kid1": set()}
 
 
@@ -167,3 +165,18 @@ async def test_duplicate_registration_is_rejected(hass):
     with pytest.raises(ValueError):
         async_register_action(hass, FakeGrant())
     assert "expose" in async_get_registry(hass).types
+
+
+async def test_rules_migrate_from_options_to_the_store_and_survive_reload(hass, label):
+    lamp = make_entity(hass, "light", "lamp", labels=[label])
+    entry = await setup(
+        hass,
+        [{"id": "r1", "name": "R", "include": {"labels": [label]}, "assistants": ["conversation"]}],
+    )
+    assert "rules" not in entry.options
+    assert [r["id"] for r in entry.runtime_data.rules_raw] == ["r1"]
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    assert [r["id"] for r in entry.runtime_data.rules_raw] == ["r1"]
+    assert entry.runtime_data.last.assistants["conversation"].desired == [lamp]

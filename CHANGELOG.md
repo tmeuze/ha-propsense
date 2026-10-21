@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Rules carry a list of actions. Exposure is the built-in `expose` action; 0.1 rules migrate automatically.
+- Extension API (`custom_components/propsense/api.py`): other integrations register action types, either `state` (reconciled) or `edge` (fires on enter or leave).
+- New setting "Allow third-party actions" (off by default). Rules using unavailable or disallowed action types stay dormant and never remove anything.
+- Rules are stored in PropSense's own storage instead of the config entry options (migrated on first start).
+
 ## 0.1.0
 
 - Rules engine: selectors over labels, areas, floors, domains, device classes, entities, devices and groups, with per-rule excludes.

@@ -150,6 +150,8 @@ class ExposureManager:
         self._lock = asyncio.Lock()
         self.registry: ActionRegistry = async_get_registry(hass)
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.state")
+        self._rules_store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.rules")
+        self._rules: list[dict[str, Any]] = []
         # Remembered between runs: the last selection of edge targets, and
         # state targets we have applied, so removing the last rule that named
         # a target still cleans it up.
@@ -168,9 +170,34 @@ class ExposureManager:
     # ------------------------------------------------------------- config
 
     @property
+    def rules_raw(self) -> list[dict[str, Any]]:
+        """The stored rules as plain dicts (copies; edit and pass to async_set_rules)."""
+        return [dict(r) for r in self._rules]
+
+    async def _load_rules(self) -> None:
+        saved = await self._rules_store.async_load()
+        if saved is not None:
+            self._rules = list(saved.get("rules", []))
+            return
+        # First run since rules moved out of the config entry's options.
+        legacy = self.entry.options.get(CONF_RULES)
+        self._rules = list(legacy or [])
+        await self._rules_store.async_save({"rules": self._rules})
+        if legacy is not None:
+            options = {k: v for k, v in self.entry.options.items() if k != CONF_RULES}
+            self.hass.config_entries.async_update_entry(self.entry, options=options)
+
+    async def async_set_rules(self, rules: list[dict[str, Any]]) -> None:
+        """Replace all rules, persist them and re-evaluate soon."""
+        self._rules = [dict(r) for r in rules]
+        await self._rules_store.async_save({"rules": self._rules})
+        self._track_group_states()
+        self._debouncer.async_schedule_call()
+
+    @property
     def rules(self) -> list[Rule]:
         out = []
-        for raw in self.entry.options.get(CONF_RULES, []):
+        for raw in self._rules:
             try:
                 out.append(Rule.from_dict(raw))
             except (KeyError, TypeError, ValueError):
@@ -184,6 +211,7 @@ class ExposureManager:
     # ---------------------------------------------------------- lifecycle
 
     async def async_start(self) -> None:
+        await self._load_rules()
         saved = await self._store.async_load() or {}
         self._edge = saved.get("edge", {})
         self._seen = saved.get("seen", {})
