@@ -8,6 +8,21 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 
 > **Rules are the single source of truth.** For every assistant PropSense manages, anything no rule selects is un-exposed, including entities you ticked by hand. Start with **dry run** on (see [Safe first run](#safe-first-run)).
 
+## Use cases
+
+Today PropSense does one thing: **expose to voice assistants** (the first two items below). The rest are what the rules-and-actions design is for, and they are planned, not built.
+
+- **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
+- **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
+- **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
+- **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
+- **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
+- **Hygiene rules** *(planned)*: exclude entities from the recorder by label, or flag entities that should be labelled but aren't.
+- **Access tiers** *(planned)*: labels decide what a guest dashboard or a voice agent can see.
+- **Grant to child instances** *(planned)*: an action type provided by [ha-unity](https://github.com/tmeuze/ha-unity) through PropSense's extension API.
+
+Similar tools exist for parts of this, for example label-based voice exposure in community integrations. PropSense aims to be the general engine: one selector model, safety guards, and an API other integrations can build actions on.
+
 ## Install
 
 ### HACS (custom repository)
@@ -89,7 +104,7 @@ Mind your model's context budget too. Each exposed entity costs roughly 26 promp
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install pytest-homeassistant-custom-component
+.venv/bin/pip install -r requirements-test.txt
 .venv/bin/python -m pytest -q
 ```
 
