@@ -8,6 +8,14 @@ const SELECTOR_FIELDS = [
   ["devices", "Devices"],
   ["entities", "Entities"],
   ["groups", "Groups"],
+  ["capabilities", "Light capabilities"],
+];
+const CAPABILITY_OPTIONS = [
+  { value: "onoff", label: "On/off only" },
+  { value: "brightness", label: "Brightness" },
+  { value: "color_temp", label: "White temperature" },
+  { value: "color", label: "Color" },
+  { value: "white", label: "White channel" },
 ];
 // The engine also matches device classes; the editor keeps them untouched.
 const KEEP_FIELDS = ["device_classes"];
@@ -161,6 +169,8 @@ class PropSensePanel extends LitElement {
         return this._floorName(v);
       case "devices":
         return this._deviceName(v);
+      case "capabilities":
+        return CAPABILITY_OPTIONS.find((o) => o.value === v)?.label ?? v;
       case "entities":
       case "groups":
         return this._entityName(v);
@@ -420,6 +430,8 @@ class PropSensePanel extends LitElement {
       case "entities":
       case "groups":
         return { entity: { multiple: true } };
+      case "capabilities":
+        return { select: { multiple: true, options: CAPABILITY_OPTIONS } };
       default: {
         const domains = [...new Set(Object.keys(this.hass.states).map((e) => e.split(".")[0]))].sort();
         return { select: { multiple: true, custom_value: true, options: domains } };
@@ -527,7 +539,12 @@ class PropSensePanel extends LitElement {
     </div>`;
   }
 
-  _labels = { assistants: "Expose to" };
+  _labels = {
+    assistants: "Expose to",
+    group: "Existing group (to edit)",
+    create_name: "Or create a group named",
+    group_type: "Type of group to create",
+  };
 
   _renderPreview() {
     const p = this._preview;
@@ -561,7 +578,7 @@ class PropSensePanel extends LitElement {
           : nothing
       )}
       ${p.blocked && Object.keys(p.blocked).length
-        ? html`<div class="warn-text">Never applied (blocked domain): ${Object.keys(p.blocked).join(", ")}</div>`
+        ? html`<div class="warn-text">Skipped: ${Object.entries(p.blocked).map(([e, why]) => `${e} (${why})`).join("; ")}</div>`
         : nothing}
       <ul class="entities">
         ${shown.map((e) => html`<li><span>${e.name}</span> <span class="muted">${e.entity_id}</span></li>`)}
@@ -597,7 +614,7 @@ class PropSensePanel extends LitElement {
                   .map(([r, t]) => `${r} (${t.join(", ")})`).join("; ")}</div>`
               : nothing}
             ${Object.keys(result.blocked || {}).length
-              ? html`<div class="notice">Blocked (matched a rule but never applied): ${Object.keys(result.blocked).join(", ")}</div>`
+              ? html`<div class="notice">Skipped (matched a rule but never applied): ${Object.entries(result.blocked).map(([e, why]) => `${e} (${why})`).join("; ")}</div>`
               : nothing}
           `}
     `;

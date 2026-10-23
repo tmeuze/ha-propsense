@@ -57,9 +57,22 @@ class ActionType:
         """Schema of this action's config; also drives the rule editor form."""
         return vol.Schema({})
 
+    def validate(self, config: dict[str, Any]) -> None:
+        """Raise ``vol.Invalid`` if a config the schema accepts makes no sense."""
+
     def targets(self, config: dict[str, Any]) -> frozenset[str]:
         """The targets (assistants, child instances, ...) this config addresses."""
         raise NotImplementedError
+
+    def accepts(self, config: dict[str, Any], entity_id: str) -> str | None:
+        """Return a reason if ``entity_id`` can't be part of this action's targets."""
+        return None
+
+    async def async_sync(self, target: str) -> None:
+        """Called after each applied run for a state target, changed or not.
+
+        For housekeeping that should hold even when nothing changed.
+        """
 
     def target_label(self, target: str) -> str:
         return target
@@ -79,6 +92,7 @@ class ActionType:
             targets=self.targets,
             mode=self.mode,
             respects_blocked_domains=self.respects_blocked_domains,
+            accepts=self.accepts,
         )
 
 

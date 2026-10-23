@@ -100,6 +100,7 @@ def _validate_rule(manager, raw: dict[str, Any]) -> dict[str, Any]:
         provider = manager.registry.get(action["type"])
         if provider is not None:
             action["config"] = dict(provider.config_schema()(action["config"]))
+            provider.validate(action["config"])
     return rule
 
 
