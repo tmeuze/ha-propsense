@@ -38,9 +38,18 @@ SELECTOR_FIELDS = (
     "capabilities",
 )
 
-# Capability tags derived from an entity's state (see snapshot.py): what a
-# light can do. Matching is any-of, like labels.
-CAPABILITIES = ("onoff", "brightness", "color_temp", "color", "white")
+# Capability tags derived from an entity's state (see snapshot.py). Matching is
+# any-of, like labels.
+CAPABILITIES = (
+    # light
+    "onoff", "brightness", "color_temp", "color", "white",
+    # cover
+    "position", "tilt",
+    # fan
+    "speed", "oscillate", "direction", "preset",
+    # climate
+    "heat", "cool", "heat_cool", "auto", "dry", "fan_only", "target_temp",
+)
 
 
 def _fset(value: Any) -> frozenset[str]:

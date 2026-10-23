@@ -10,14 +10,17 @@ groups relate in Home Assistant. Rules:
 * Group membership is read from a group entity's ``entity_id`` attribute
   (``group.*`` and the light, switch, fan and cover groups all expose it),
   expanded through nested groups.
-* Capabilities come from a light's ``supported_color_modes`` (tags: onoff,
-  brightness, color_temp, color, white). Entities without a state, or that are
-  not lights, have none.
+* Capabilities are tags read from the state of lights, covers, fans and
+  climate entities (see ``capabilities_of``). Entities without a state, or of
+  other domains, have none.
 * Disabled entities are skipped. Entities that exist only in the state
   machine (no registry entry) are included with whatever their state says.
 """
 from __future__ import annotations
 
+from homeassistant.components.climate import ClimateEntityFeature
+from homeassistant.components.cover import CoverEntityFeature
+from homeassistant.components.fan import FanEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     area_registry as ar,
@@ -31,26 +34,73 @@ _MAX_GROUP_DEPTH = 5
 
 _COLOR_MODES = {"hs", "xy", "rgb", "rgbw", "rgbww"}
 _WHITE_MODES = {"white", "rgbw", "rgbww"}
+_HVAC_TAGS = ("heat", "cool", "heat_cool", "auto", "dry", "fan_only")
+
+# Domains whose entities report capabilities (see ``capabilities_of``).
+CAPABILITY_DOMAINS = ("light", "cover", "fan", "climate")
+
+
+def _features(state) -> int:
+    try:
+        return int(state.attributes.get("supported_features") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def capabilities_of(hass: HomeAssistant, entity_id: str) -> frozenset[str]:
-    """What a light can do, from the color modes its state reports."""
-    if not entity_id.startswith("light."):
+    """What an entity can do, as plain tags, from what its state reports.
+
+    * light: onoff, brightness, color_temp, color, white (supported color modes)
+    * cover: position, tilt (supported features)
+    * fan: speed, oscillate, direction, preset (supported features)
+    * climate: heat, cool, heat_cool, auto, dry, fan_only (HVAC modes) and
+      target_temp (can set a target temperature)
+    """
+    domain = entity_id.split(".", 1)[0]
+    if domain not in CAPABILITY_DOMAINS:
         return frozenset()
     state = hass.states.get(entity_id)
-    modes = set((state.attributes.get("supported_color_modes") or []) if state else [])
-    if not modes:
+    if state is None:
         return frozenset()
+
     tags: set[str] = set()
-    if modes == {"onoff"}:
-        return frozenset({"onoff"})
-    tags.add("brightness")
-    if "color_temp" in modes:
-        tags.add("color_temp")
-    if modes & _COLOR_MODES:
-        tags.add("color")
-    if modes & _WHITE_MODES:
-        tags.add("white")
+    if domain == "light":
+        modes = set(state.attributes.get("supported_color_modes") or [])
+        if not modes:
+            return frozenset()
+        if modes == {"onoff"}:
+            return frozenset({"onoff"})
+        tags.add("brightness")
+        if "color_temp" in modes:
+            tags.add("color_temp")
+        if modes & _COLOR_MODES:
+            tags.add("color")
+        if modes & _WHITE_MODES:
+            tags.add("white")
+    elif domain == "cover":
+        features = _features(state)
+        if features & CoverEntityFeature.SET_POSITION:
+            tags.add("position")
+        if features & CoverEntityFeature.SET_TILT_POSITION:
+            tags.add("tilt")
+    elif domain == "fan":
+        features = _features(state)
+        for flag, tag in (
+            (FanEntityFeature.SET_SPEED, "speed"),
+            (FanEntityFeature.OSCILLATE, "oscillate"),
+            (FanEntityFeature.DIRECTION, "direction"),
+            (FanEntityFeature.PRESET_MODE, "preset"),
+        ):
+            if features & flag:
+                tags.add(tag)
+    else:  # climate
+        modes = {str(m) for m in state.attributes.get("hvac_modes") or []}
+        tags |= {m for m in _HVAC_TAGS if m in modes}
+        if _features(state) & (
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        ):
+            tags.add("target_temp")
     return frozenset(tags)
 
 

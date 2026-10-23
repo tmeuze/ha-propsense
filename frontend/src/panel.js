@@ -8,14 +8,27 @@ const SELECTOR_FIELDS = [
   ["devices", "Devices"],
   ["entities", "Entities"],
   ["groups", "Groups"],
-  ["capabilities", "Light capabilities"],
+  ["capabilities", "Capabilities"],
 ];
 const CAPABILITY_OPTIONS = [
-  { value: "onoff", label: "On/off only" },
-  { value: "brightness", label: "Brightness" },
-  { value: "color_temp", label: "White temperature" },
-  { value: "color", label: "Color" },
-  { value: "white", label: "White channel" },
+  { value: "onoff", label: "Light: on/off only" },
+  { value: "brightness", label: "Light: brightness" },
+  { value: "color_temp", label: "Light: white temperature" },
+  { value: "color", label: "Light: color" },
+  { value: "white", label: "Light: white channel" },
+  { value: "position", label: "Cover: set position" },
+  { value: "tilt", label: "Cover: set tilt" },
+  { value: "speed", label: "Fan: speed" },
+  { value: "oscillate", label: "Fan: oscillate" },
+  { value: "direction", label: "Fan: direction" },
+  { value: "preset", label: "Fan: preset modes" },
+  { value: "heat", label: "Climate: heat" },
+  { value: "cool", label: "Climate: cool" },
+  { value: "heat_cool", label: "Climate: heat/cool" },
+  { value: "auto", label: "Climate: auto" },
+  { value: "dry", label: "Climate: dry" },
+  { value: "fan_only", label: "Climate: fan only" },
+  { value: "target_temp", label: "Climate: target temperature" },
 ];
 // The engine also matches device classes; the editor keeps them untouched.
 const KEEP_FIELDS = ["device_classes"];
@@ -665,6 +678,7 @@ class PropSensePanel extends LitElement {
           <div><b>Area</b>: ${ex.area_id ? this._areaName(ex.area_id) : "none"}
             · <b>Floor</b>: ${ex.floor_id ? this._floorName(ex.floor_id) : "none"}</div>
           <div><b>Groups</b>: ${ex.groups.map((g) => this._entityName(g)).join(", ") || "none"}</div>
+          <div><b>Capabilities</b>: ${ex.capabilities.map((c) => this._valueName("capabilities", c)).join(", ") || "none"}</div>
         </ha-card>
         ${ex.rules.length ? ex.rules.map((r) => html`<ha-card class="pad">
           <div class="row"><b>${r.name}</b>
