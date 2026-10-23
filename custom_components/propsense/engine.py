@@ -35,7 +35,12 @@ SELECTOR_FIELDS = (
     "entities",
     "devices",
     "groups",
+    "capabilities",
 )
+
+# Capability tags derived from an entity's state (see snapshot.py): what a
+# light can do. Matching is any-of, like labels.
+CAPABILITIES = ("onoff", "brightness", "color_temp", "color", "white")
 
 
 def _fset(value: Any) -> frozenset[str]:
@@ -61,6 +66,7 @@ class EntityFacts:
     device_id: str | None = None
     device_class: str | None = None
     groups: frozenset[str] = frozenset()
+    capabilities: frozenset[str] = frozenset()
 
     @property
     def domain(self) -> str:
@@ -77,6 +83,7 @@ class Selector:
     entities: frozenset[str] = frozenset()
     devices: frozenset[str] = frozenset()
     groups: frozenset[str] = frozenset()
+    capabilities: frozenset[str] = frozenset()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Selector":
@@ -113,6 +120,8 @@ class Selector:
         if self.devices and facts.device_id not in self.devices:
             return False
         if self.groups and not (self.groups & facts.groups):
+            return False
+        if self.capabilities and not (self.capabilities & facts.capabilities):
             return False
         return True
 
@@ -154,6 +163,9 @@ class ActionSpec:
     targets: Callable[[dict[str, Any]], frozenset[str]]
     mode: str = "state"
     respects_blocked_domains: bool = True
+    # Optional filter: can this entity be a member of the target? Entities it
+    # refuses are skipped and reported like blocked ones.
+    accepts: Callable[[dict[str, Any], str], str | None] | None = None
 
 
 def _expose_targets(config: dict[str, Any]) -> frozenset[str]:
@@ -320,8 +332,8 @@ def evaluate(
         if type_id in specs:
             plan.managed_targets.setdefault(type_id, set()).update(targets)
 
-    # (rule, spec, targets) for every runnable action
-    runnable: list[tuple[Rule, ActionSpec, frozenset[str]]] = []
+    # (rule, spec, config, targets) for every runnable action
+    runnable: list[tuple[Rule, ActionSpec, dict[str, Any], frozenset[str]]] = []
     for rule in rules:
         plan.by_rule[rule.id] = set()
         for action in rule.actions:
@@ -331,17 +343,22 @@ def evaluate(
                 continue
             targets = spec.targets(action.config)
             plan.managed_targets.setdefault(spec.type_id, set()).update(targets)
-            runnable.append((rule, spec, targets))
+            runnable.append((rule, spec, action.config, targets))
 
     for type_id, managed in plan.managed_targets.items():
         plan.targets[type_id] = {target: set() for target in managed}
 
     for f in facts:
-        for rule, spec, targets in runnable:
+        for rule, spec, config, targets in runnable:
             if not rule.selects(f):
                 continue
             if spec.respects_blocked_domains and f.domain in settings.blocked_domains:
                 plan.blocked[f.entity_id] = f"domain '{f.domain}' is blocked"
+                continue
+            if spec.accepts is not None and (
+                why := spec.accepts(config, f.entity_id)
+            ):
+                plan.blocked[f.entity_id] = why
                 continue
             plan.by_rule[rule.id].add(f.entity_id)
             for target in targets:

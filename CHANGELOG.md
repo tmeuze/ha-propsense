@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- New built-in action **Keep a group's members in sync**: rules decide the members of a group helper (light, switch, fan, cover, media player or valve group). Name an existing group to edit, or give a name and PropSense creates the group. Managed groups get the `[PropSense]` label. Rules are the single source of truth: members added by hand are removed.
+- New selector field **Light capabilities** (on/off, brightness, white temperature, color, white channel), read from a light's supported color modes.
+- Extension API: providers can `validate` configs, filter members with `accepts`, and get an `async_sync` housekeeping hook.
+
 ## 0.2.0
 
 - **PropSense panel** in the sidebar (admin only): rule list with enable switches, a rule editor with live preview of what a rule selects, a status page with dry run and apply, an "explain this entity" page, and settings.

@@ -10,6 +10,9 @@ groups relate in Home Assistant. Rules:
 * Group membership is read from a group entity's ``entity_id`` attribute
   (``group.*`` and the light, switch, fan and cover groups all expose it),
   expanded through nested groups.
+* Capabilities come from a light's ``supported_color_modes`` (tags: onoff,
+  brightness, color_temp, color, white). Entities without a state, or that are
+  not lights, have none.
 * Disabled entities are skipped. Entities that exist only in the state
   machine (no registry entry) are included with whatever their state says.
 """
@@ -25,6 +28,30 @@ from homeassistant.helpers import (
 from .engine import EntityFacts, Settings
 
 _MAX_GROUP_DEPTH = 5
+
+_COLOR_MODES = {"hs", "xy", "rgb", "rgbw", "rgbww"}
+_WHITE_MODES = {"white", "rgbw", "rgbww"}
+
+
+def capabilities_of(hass: HomeAssistant, entity_id: str) -> frozenset[str]:
+    """What a light can do, from the color modes its state reports."""
+    if not entity_id.startswith("light."):
+        return frozenset()
+    state = hass.states.get(entity_id)
+    modes = set((state.attributes.get("supported_color_modes") or []) if state else [])
+    if not modes:
+        return frozenset()
+    tags: set[str] = set()
+    if modes == {"onoff"}:
+        return frozenset({"onoff"})
+    tags.add("brightness")
+    if "color_temp" in modes:
+        tags.add("color_temp")
+    if modes & _COLOR_MODES:
+        tags.add("color")
+    if modes & _WHITE_MODES:
+        tags.add("white")
+    return frozenset(tags)
 
 
 def expand_group(hass: HomeAssistant, group_id: str, _depth: int = 0) -> set[str]:
@@ -87,6 +114,7 @@ def build_facts(
                 device_id=entry.device_id,
                 device_class=entry.device_class or entry.original_device_class,
                 groups=frozenset(membership.get(entry.entity_id, ())),
+                capabilities=capabilities_of(hass, entry.entity_id),
             )
         )
 
@@ -98,6 +126,7 @@ def build_facts(
                 entity_id=state.entity_id,
                 device_class=state.attributes.get("device_class"),
                 groups=frozenset(membership.get(state.entity_id, ())),
+                capabilities=capabilities_of(hass, state.entity_id),
             )
         )
     return facts

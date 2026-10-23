@@ -16,7 +16,12 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import (
+    EVENT_HOMEASSISTANT_STARTED,
+    EVENT_STATE_CHANGED,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import (
     area_registry as ar,
@@ -231,6 +236,13 @@ class ExposureManager:
         self._edge = saved.get("edge", {})
         self._seen = saved.get("seen", {})
         self._unsubs.append(self.registry.async_add_listener(self._on_registry_change))
+        self._unsubs.append(
+            self.hass.bus.async_listen(
+                EVENT_STATE_CHANGED,
+                self._on_light_available,
+                event_filter=self._light_became_available,
+            )
+        )
         for event_type in _REGISTRY_EVENTS:
             self._unsubs.append(
                 self.hass.bus.async_listen(event_type, self._on_registry_event)
@@ -259,6 +271,32 @@ class ExposureManager:
         self._debouncer.async_cancel()
 
     # ------------------------------------------------------------ triggers
+
+    @staticmethod
+    @callback
+    def _light_became_available(data: Any) -> bool:
+        """A light reporting its capabilities for the first time (after start-up)."""
+        new = data.get("new_state")
+        old = data.get("old_state")
+        return (
+            new is not None
+            and new.entity_id.startswith("light.")
+            and new.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            and (old is None or old.state in (STATE_UNAVAILABLE, STATE_UNKNOWN))
+        )
+
+    @callback
+    def _on_light_available(self, _event: Event) -> None:
+        # Capabilities come from state attributes, so rules that select on them
+        # must re-run when a light first reports.
+        if self._uses_capabilities():
+            self._debouncer.async_schedule_call()
+
+    def _uses_capabilities(self) -> bool:
+        return any(
+            r.enabled and (r.include.capabilities or r.exclude.capabilities)
+            for r in self.rules
+        )
 
     @callback
     def _on_registry_change(self) -> None:
@@ -511,6 +549,10 @@ class ExposureManager:
                 len(desired),
             )
         tres.exposed = sorted(desired)
+        try:
+            await action.async_sync(target)
+        except Exception:  # housekeeping must not fail the apply
+            _LOGGER.exception("PropSense %s housekeeping failed for %s", type_id, target)
 
         changed = False
         if type_id != EXPOSE:

@@ -10,10 +10,11 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 
 ## Use cases
 
-Today PropSense does one thing: **expose to voice assistants** (the first two items below). The rest are what the rules-and-actions design is for, and they are planned, not built.
+Today PropSense has two actions: **expose to voice assistants** and **keep a group's members in sync**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
 - **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
+- **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
 - **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
 - **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
 - **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
@@ -47,7 +48,7 @@ A **rule** has:
 - an **action** (expose to one or more assistants),
 - an enabled switch.
 
-A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`.
+A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`. Capabilities (`onoff`, `brightness`, `color_temp`, `color`, `white`) describe lights and come from their supported color modes.
 
 ### Semantics
 
@@ -69,6 +70,10 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 | `inherit_device_labels` | on | Entities inherit their device's labels. |
 | `inherit_area_labels` | off | Entities inherit their area's labels. |
 | `dry_run` | off | Compute and report the plan without applying it. |
+
+### Group action
+
+The **Keep a group's members in sync** action targets a Home Assistant group helper. Pick an existing group to edit, or give a name (and type) and PropSense creates it. Either way the group gets the `[PropSense]` label. The rules are the single source of truth: members added by hand are removed on the next apply. Entities of the wrong domain for the group type, other group helpers, and blocked domains are skipped and listed in the status page. Editing members reloads the group briefly.
 
 ## Configure
 

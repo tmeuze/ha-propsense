@@ -23,6 +23,7 @@ from homeassistant.setup import async_setup_component
 
 from .actions import ExposeAction
 from .api import async_get_registry
+from .group_action import GroupMembersAction
 from .const import DOMAIN
 from .panel import async_register_panel, async_remove_panel
 from .websocket_api import async_register_commands
@@ -51,7 +52,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     This runs before any config entry, so other integrations can register
     action types as soon as they load.
     """
-    async_get_registry(hass).register(ExposeAction(hass), builtin=True)
+    registry = async_get_registry(hass)
+    registry.register(ExposeAction(hass), builtin=True)
+    registry.register(GroupMembersAction(hass), builtin=True)
     async_register_commands(hass)
     return True
 

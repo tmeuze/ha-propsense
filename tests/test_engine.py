@@ -280,3 +280,32 @@ def test_remembered_targets_stay_managed_without_rules():
         [], ENTITIES, Settings(), specs={"grant": GRANT}, extra_managed={"grant": ["kid1"]}
     )
     assert plan.targets["grant"] == {"kid1": set()}
+
+
+def test_capabilities_selector_is_any_of_and_anded_with_other_fields():
+    lamps = [
+        facts("light.a", capabilities=frozenset({"brightness", "color_temp"}), area_id="k"),
+        facts("light.b", capabilities=frozenset({"onoff"}), area_id="k"),
+        facts("light.c", capabilities=frozenset({"brightness", "color"}), area_id="b"),
+    ]
+    r = rule("c", include={"capabilities": ["color_temp", "color"], "areas": ["k"]})
+    plan = evaluate([r], lamps, Settings())
+    assert plan.desired["conversation"] == {"light.a"}
+
+
+def test_accepts_filter_reports_why_an_entity_was_skipped():
+    spec = ActionSpec(
+        type_id="g",
+        targets=lambda cfg: frozenset({"grp"}),
+        accepts=lambda cfg, entity_id: (
+            None if entity_id.startswith("light.") else "not a light"
+        ),
+    )
+    r = action_rule(
+        "g",
+        {"labels": ["expose_novak"]},
+        [{"type": "g", "config": {}}],
+    )
+    plan = evaluate([r], ENTITIES, Settings(), specs={"g": spec})
+    assert plan.targets["g"]["grp"] == {"light.kitchen", "light.bedroom"}
+    assert plan.blocked["lock.front"] == "domain 'lock' is blocked"
