@@ -14,7 +14,7 @@ Today PropSense has two actions: **expose to voice assistants** and **keep a gro
 
 - **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
 - **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
-- **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
+- **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
 - **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
 - **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
 - **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
@@ -48,7 +48,7 @@ A **rule** has:
 - an **action** (expose to one or more assistants),
 - an enabled switch.
 
-A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`. Capabilities (`onoff`, `brightness`, `color_temp`, `color`, `white`) describe lights and come from their supported color modes.
+A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
 
 ### Semantics
 

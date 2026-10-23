@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Capabilities now cover more than lights: covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`). The selector field is simply called **Capabilities**.
+
 ## 0.3.0
 
 - New built-in action **Keep a group's members in sync**: rules decide the members of a group helper (light, switch, fan, cover, media player or valve group). Name an existing group to edit, or give a name and PropSense creates the group. Managed groups get the `[PropSense]` label. Rules are the single source of truth: members added by hand are removed.

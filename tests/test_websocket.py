@@ -102,6 +102,7 @@ async def test_explain_reports_each_rule(hass, hass_ws_client):
     await client.send_json_auto_id({"type": "propsense/explain", "entity_id": lamp})
     out = (await client.receive_json())["result"]
     assert out["found"] and label in out["labels"]
+    assert out["capabilities"] == []
     assert out["rules"][0]["actions"][0]["status"] == "applies"
 
     await client.send_json_auto_id({"type": "propsense/explain", "entity_id": lock})

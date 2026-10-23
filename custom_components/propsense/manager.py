@@ -61,7 +61,7 @@ from .engine import (
     explain,
     plan_changes,
 )
-from .snapshot import build_facts
+from .snapshot import CAPABILITY_DOMAINS, build_facts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -239,8 +239,8 @@ class ExposureManager:
         self._unsubs.append(
             self.hass.bus.async_listen(
                 EVENT_STATE_CHANGED,
-                self._on_light_available,
-                event_filter=self._light_became_available,
+                self._on_capability_source_available,
+                event_filter=self._became_available,
             )
         )
         for event_type in _REGISTRY_EVENTS:
@@ -274,21 +274,21 @@ class ExposureManager:
 
     @staticmethod
     @callback
-    def _light_became_available(data: Any) -> bool:
-        """A light reporting its capabilities for the first time (after start-up)."""
+    def _became_available(data: Any) -> bool:
+        """An entity reporting its capabilities for the first time (after start-up)."""
         new = data.get("new_state")
         old = data.get("old_state")
         return (
             new is not None
-            and new.entity_id.startswith("light.")
+            and new.entity_id.split(".", 1)[0] in CAPABILITY_DOMAINS
             and new.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
             and (old is None or old.state in (STATE_UNAVAILABLE, STATE_UNKNOWN))
         )
 
     @callback
-    def _on_light_available(self, _event: Event) -> None:
+    def _on_capability_source_available(self, _event: Event) -> None:
         # Capabilities come from state attributes, so rules that select on them
-        # must re-run when a light first reports.
+        # must re-run when an entity first reports.
         if self._uses_capabilities():
             self._debouncer.async_schedule_call()
 
@@ -396,6 +396,7 @@ class ExposureManager:
             "device_id": match.device_id,
             "device_class": match.device_class,
             "groups": sorted(match.groups),
+            "capabilities": sorted(match.capabilities),
             "rules": explain(rules, match, settings, self._specs(settings)),
         }
 
