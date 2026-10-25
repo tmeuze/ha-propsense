@@ -109,6 +109,7 @@ class ApplyResult:
     dormant: dict[str, list[str]] = field(default_factory=dict)
     # rule id -> entity ids it selected (not serialised: can be large)
     rule_entities: dict[str, set[str]] = field(default_factory=dict)
+    rule_skipped: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def assistants(self) -> dict[str, TargetResult]:
@@ -232,6 +233,11 @@ class ExposureManager:
 
     async def async_start(self) -> None:
         await self._load_rules()
+        for type_id, action in self.registry.types.items():
+            if self.registry.is_builtin(type_id):
+                if hasattr(action, "is_dry_run"):
+                    action.is_dry_run = lambda: self.settings.dry_run
+                await action.async_start()
         saved = await self._store.async_load() or {}
         self._edge = saved.get("edge", {})
         self._seen = saved.get("seen", {})
@@ -262,6 +268,9 @@ class ExposureManager:
             )
 
     async def async_stop(self) -> None:
+        for type_id, action in self.registry.types.items():
+            if self.registry.is_builtin(type_id):
+                await action.async_stop()
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
@@ -425,6 +434,7 @@ class ExposureManager:
                 blocked=dict(plan.blocked),
                 dormant={rid: sorted(t) for rid, t in plan.dormant.items()},
                 rule_entities=plan.by_rule,
+                rule_skipped=plan.blocked_by_rule,
             )
             _ = result.assistants  # expose is always reported, even when empty
 

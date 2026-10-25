@@ -94,6 +94,29 @@ def _action_types(manager) -> list[dict[str, Any]]:
     return out
 
 
+def _summaries(manager) -> dict[str, list[str]]:
+    """Plain-language line per action of each rule, from the providers themselves."""
+    out: dict[str, list[str]] = {}
+    for rule in manager.rules_raw:
+        lines = []
+        for action in rule.get("actions", []):
+            provider = manager.registry.get(action.get("type", ""))
+            if provider is None:
+                lines.append(f"{action.get('type')} (not installed)")
+                continue
+            targets = sorted(provider.targets(action.get("config") or {}))
+            if provider.type_id == "expose":
+                lines.append(
+                    "Expose to " + ", ".join(provider.target_label(t) for t in targets)
+                )
+            elif targets:
+                lines.append(", ".join(provider.target_label(t) for t in targets))
+            else:
+                lines.append(provider.name)
+        out[rule["id"]] = lines
+    return out
+
+
 def _validate_rule(manager, raw: dict[str, Any]) -> dict[str, Any]:
     rule = _RULE(raw)
     for action in rule["actions"]:
@@ -115,12 +138,18 @@ async def ws_overview(hass, connection, msg) -> None:
         msg["id"],
         {
             "rules": manager.rules_raw,
+            "summaries": _summaries(manager),
             "settings": manager.settings.to_dict(),
             "actions": _action_types(manager),
             "assistants": [
                 {"value": a, "label": ASSISTANT_LABELS.get(a, a)} for a in ASSISTANTS
             ],
             "last": manager.last.to_dict() if manager.last else None,
+            "runtime": {
+                type_id: status
+                for type_id, action in manager.registry.types.items()
+                if manager.registry.is_builtin(type_id) and (status := action.status())
+            },
             "defaults": Settings().to_dict(),
         },
     )
@@ -218,6 +247,7 @@ async def ws_preview(hass, connection, msg) -> None:
         entities = sorted(result.rule_entities.get(draft_id, set()))
         payload["draft"] = {
             "count": len(entities),
+            "skipped": result.rule_skipped.get(draft_id, {}),
             "entities": [
                 {"entity_id": e, "name": _name(hass, e)} for e in entities[:200]
             ],

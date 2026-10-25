@@ -40,6 +40,61 @@ const TABS = [
   ["settings", "Settings"],
 ];
 
+const DUR = (hours, minutes = 0) => ({ hours, minutes, seconds: 0 });
+const TEMPLATES = [
+  {
+    id: "auto_off",
+    title: "Auto-off timer",
+    text: "Turn outlets off after they have been on for a while. Survives restarts and respects manual switching.",
+    make: () => ({
+      name: "Auto-off outlets",
+      include: { domains: ["switch"] },
+      actions: [{ type: "schedule", config: { trigger: "state_for", state: "on", do: "turn_off", duration: DUR(3) } }],
+    }),
+  },
+  {
+    id: "sunset_on",
+    title: "Lights on at sunset",
+    text: "Turn lights on at sunset, with an optional offset.",
+    make: () => ({
+      name: "Lights on at sunset",
+      include: { domains: ["light"] },
+      actions: [{ type: "schedule", config: { trigger: "sun", event: "sunset", offset_minutes: 0, do: "turn_on", catch_up_minutes: 30 } }],
+    }),
+  },
+  {
+    id: "night_off",
+    title: "Lights off at night",
+    text: "Turn lights off at a set time of day.",
+    make: () => ({
+      name: "Lights off at night",
+      include: { domains: ["light"] },
+      actions: [{ type: "schedule", config: { trigger: "time", at: "23:00:00", do: "turn_off", catch_up_minutes: 0 } }],
+    }),
+  },
+  {
+    id: "expose",
+    title: "Expose to a voice assistant",
+    text: "Let Assist, Alexa or Google see the entities with a label.",
+    make: () => ({
+      name: "Voice assistant exposure",
+      include: {},
+      actions: [{ type: "expose", config: { assistants: ["conversation"] } }],
+    }),
+  },
+  {
+    id: "group",
+    title: "Keep a group in sync",
+    text: "Fill a group with the entities a rule selects, for example every light with white temperature.",
+    make: () => ({
+      name: "Dynamic group",
+      include: {},
+      actions: [{ type: "group", config: { create_name: "", group_type: "light" } }],
+    }),
+  },
+  { id: "blank", title: "Start from scratch", text: "An empty rule.", make: () => ({}) },
+];
+
 const emptySelector = () =>
   Object.fromEntries([...SELECTOR_FIELDS.map(([k]) => k), ...KEEP_FIELDS].map((k) => [k, []]));
 
@@ -81,6 +136,8 @@ class PropSensePanel extends LitElement {
     _explainEntity: { state: true },
     _settingsDraft: { state: true },
     _showAll: { state: true },
+    _choosing: { state: true },
+    _toastMsg: { state: true },
   };
 
   constructor() {
@@ -96,6 +153,8 @@ class PropSensePanel extends LitElement {
     this._explainEntity = "";
     this._settingsDraft = null;
     this._showAll = false;
+    this._choosing = false;
+    this._toastMsg = "";
     this._previewTimer = null;
   }
 
@@ -119,6 +178,20 @@ class PropSensePanel extends LitElement {
     } catch (err) {
       this._error = err.message || String(err);
     }
+  }
+
+  _toast(msg) {
+    this._toastMsg = msg;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => (this._toastMsg = ""), 3500);
+  }
+
+  _rel(iso) {
+    const ms = new Date(iso).getTime() - Date.now();
+    const abs = Math.abs(ms);
+    const mins = Math.round(abs / 60000);
+    const text = mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`;
+    return ms >= 0 ? `in ${text}` : `${text} ago (waiting)`;
   }
 
   async _run(fn) {
@@ -220,6 +293,7 @@ class PropSensePanel extends LitElement {
         rule: { ...rule, enabled: !rule.enabled },
       });
       await this._applyAfterChange();
+      this._toast(rule.enabled ? `Disabled “${rule.name}”` : `Enabled “${rule.name}”`);
     });
   }
 
@@ -238,7 +312,8 @@ class PropSensePanel extends LitElement {
   }
 
   _edit(rule) {
-    this._editing = JSON.parse(JSON.stringify(rule || newRule()));
+    this._choosing = false;
+    this._editing = { ...newRule(), ...JSON.parse(JSON.stringify(rule || newRule())) };
     for (const key of ["include", "exclude"]) {
       this._editing[key] = { ...emptySelector(), ...this._editing[key] };
     }
@@ -296,6 +371,7 @@ class PropSensePanel extends LitElement {
       await this._ws({ type: "propsense/rule/save", rule });
       this._editing = null;
       await this._applyAfterChange();
+      this._toast(`Saved “${rule.name}”`);
     });
   }
 
@@ -341,6 +417,7 @@ class PropSensePanel extends LitElement {
           >${label}</button>`
         )}
       </div>
+      ${this._toastMsg ? html`<div class="toast">${this._toastMsg}</div>` : nothing}
       <div class="content">
         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
         ${this._data ? this._renderTab() : nothing}
@@ -380,13 +457,25 @@ class PropSensePanel extends LitElement {
         : nothing}
       <div class="row">
         <h2>Rules</h2>
-        <button class="primary" @click=${() => this._edit(null)}>Add rule</button>
+        <button class="primary" @click=${() => (this._choosing = !this._choosing)}>Add rule</button>
       </div>
+      ${this._choosing ? this._renderChooser() : nothing}
       ${rules.length
         ? rules.map((rule) => this._renderRuleCard(rule))
         : html`<p class="muted">No rules yet. A rule selects entities, for example everything labelled
             “Expose: Novak”, and applies actions such as exposing them to Assist.</p>`}
     `;
+  }
+
+  _renderChooser() {
+    return html`<div class="templates">
+      ${TEMPLATES.map(
+        (t) => html`<button class="template" @click=${() => this._edit(t.make())}>
+          <div class="rule-name">${t.title}</div>
+          <div class="muted">${t.text}</div>
+        </button>`
+      )}
+    </div>`;
   }
 
   async _setDryRun(on) {
@@ -406,10 +495,10 @@ class PropSensePanel extends LitElement {
       <div class="rule-head">
         <div>
           <div class="rule-name">${rule.name}</div>
-          <div class="muted">
-            ${rule.actions.map((a) => this._typeName(a.type)).join(", ") || "No actions"}
-            · ${this._countFor(rule)} entities
-          </div>
+          <div class="muted">${this._countFor(rule)} ${this._countFor(rule) === 1 ? "entity" : "entities"}</div>
+          <ul class="summary">
+            ${(this._data.summaries?.[rule.id] || []).map((line) => html`<li>${line}</li>`)}
+          </ul>
         </div>
         <div class="rule-actions">
           <label class="switch" title="Enable or disable">
@@ -497,8 +586,8 @@ class PropSensePanel extends LitElement {
           </ha-card>
 
           <ha-card class="pad">
-            <h3>Include</h3>
-            <p class="muted">Every field you fill in must match (and); within a field any value will do (or).</p>
+            <h3>1 · What does it apply to?</h3>
+            <p class="muted">Every field you fill in must match (and); within a field any value will do (or). The live preview shows what is selected.</p>
             ${this._renderSelectorFields("include")}
           </ha-card>
 
@@ -511,7 +600,7 @@ class PropSensePanel extends LitElement {
           </ha-card>
 
           <ha-card class="pad">
-            <div class="row"><h3>Actions</h3>
+            <div class="row"><h3>2 · What should happen?</h3>
               <button @click=${this._addAction}>Add action</button></div>
             ${r.actions.length
               ? r.actions.map((a, i) => this._renderAction(a, i))
@@ -539,7 +628,8 @@ class PropSensePanel extends LitElement {
         </select>
         <button class="danger" @click=${() => this._removeAction(i)}>Remove</button>
       </div>
-      ${current
+      ${action.type === "schedule" ? this._renderSchedule(action, i) : nothing}
+      ${current && action.type !== "schedule"
         ? html`${current.available ? nothing : html`<div class="warn-text">Dormant until third-party actions are allowed in Settings.</div>`}
           <ha-form
             .hass=${this.hass}
@@ -548,7 +638,81 @@ class PropSensePanel extends LitElement {
             .computeLabel=${labelFor}
             @value-changed=${(e) => this._setAction(i, { config: e.detail.value })}
           ></ha-form>`
-        : html`<div class="warn-text">This action type is not installed, so the rule is dormant.</div>`}
+        : action.type === "schedule" || current
+          ? nothing
+          : html`<div class="warn-text">This action type is not installed, so the rule is dormant.</div>`}
+    </div>`;
+  }
+
+  _renderSchedule(action, i) {
+    const c = {
+      trigger: "state_for", do: "turn_off", state: "on", event: "sunset",
+      offset_minutes: 0, catch_up_minutes: 0, days: [], ...action.config,
+    };
+    const set = (patch) => this._setAction(i, { config: { ...c, ...patch } });
+    const dur = { hours: 0, minutes: 0, seconds: 0, ...(c.duration || {}) };
+    const num = (v) => Math.max(0, parseInt(v || "0", 10) || 0);
+    const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    return html`<div class="sentence">
+      <div class="line">
+        <select .value=${c.do} @change=${(e) => set({ do: e.target.value })}>
+          <option value="turn_off" ?selected=${c.do === "turn_off"}>Turn off</option>
+          <option value="turn_on" ?selected=${c.do === "turn_on"}>Turn on</option>
+        </select>
+        <span>the selected entities</span>
+        <select .value=${c.trigger} @change=${(e) => set({ trigger: e.target.value })}>
+          <option value="state_for" ?selected=${c.trigger === "state_for"}>after they have been</option>
+          <option value="time" ?selected=${c.trigger === "time"}>at a time of day</option>
+          <option value="sun" ?selected=${c.trigger === "sun"}>at sunrise or sunset</option>
+        </select>
+      </div>
+      ${c.trigger === "state_for"
+        ? html`<div class="line">
+            <select .value=${c.state} @change=${(e) => set({ state: e.target.value })}>
+              <option value="on" ?selected=${c.state === "on"}>on</option>
+              <option value="off" ?selected=${c.state === "off"}>off</option>
+            </select>
+            <span>for</span>
+            <input class="small" type="number" min="0" .value=${String(dur.hours)}
+              @input=${(e) => set({ duration: { ...dur, hours: num(e.target.value) } })} />
+            <span>hours</span>
+            <input class="small" type="number" min="0" max="59" .value=${String(dur.minutes)}
+              @input=${(e) => set({ duration: { ...dur, minutes: num(e.target.value) } })} />
+            <span>minutes</span>
+          </div>
+          <p class="muted">Watches the entity's state, so it makes no difference whether it was switched in Home
+            Assistant or by hand. If it goes ${c.state === "on" ? "off" : "on"} first, the timer is cancelled.
+            Deadlines are stored, so restarts don't reset them. Entities already ${c.state} when PropSense first
+            sees them start their timer then.</p>`
+        : nothing}
+      ${c.trigger === "time"
+        ? html`<div class="line"><span>at</span>
+            <input type="time" step="60" .value=${(c.at || "").slice(0, 5)}
+              @input=${(e) => set({ at: e.target.value ? `${e.target.value}:00` : "" })} /></div>`
+        : nothing}
+      ${c.trigger === "sun"
+        ? html`<div class="line"><span>at</span>
+            <select .value=${c.event} @change=${(e) => set({ event: e.target.value })}>
+              <option value="sunrise" ?selected=${c.event === "sunrise"}>sunrise</option>
+              <option value="sunset" ?selected=${c.event === "sunset"}>sunset</option>
+            </select>
+            <input class="small" type="number" .value=${String(c.offset_minutes)}
+              @input=${(e) => set({ offset_minutes: parseInt(e.target.value || "0", 10) || 0 })} />
+            <span>minutes (negative is before)</span></div>`
+        : nothing}
+      ${c.trigger !== "state_for"
+        ? html`<div class="line"><span>on</span>
+            ${DAYS.map((d) => html`<button class="chip ${c.days.includes(d) ? "on" : ""}" type="button"
+              @click=${() => set({ days: c.days.includes(d) ? c.days.filter((x) => x !== d) : [...c.days, d] })}>
+              ${d}</button>`)}
+            <span class="muted">${c.days.length ? "" : "(every day)"}</span></div>
+          <div class="line"><span>If Home Assistant was down at that time, still run it up to</span>
+            <input class="small" type="number" min="0" .value=${String(c.catch_up_minutes)}
+              @input=${(e) => set({ catch_up_minutes: num(e.target.value) })} />
+            <span>minutes late (0 = skip)</span></div>
+          <p class="muted">Entities already ${c.do === "turn_on" ? "on" : "off"} are left alone, and a light someone turned
+            off by hand stays off until the next time.</p>`
+        : nothing}
     </div>`;
   }
 
@@ -590,8 +754,8 @@ class PropSensePanel extends LitElement {
           ? html`<div class="warn-text">${this._targetName("expose", a)}: over the size limit, nothing would change.</div>`
           : nothing
       )}
-      ${p.blocked && Object.keys(p.blocked).length
-        ? html`<div class="warn-text">Skipped: ${Object.entries(p.blocked).map(([e, why]) => `${e} (${why})`).join("; ")}</div>`
+      ${draft?.skipped && Object.keys(draft.skipped).length
+        ? html`<div class="warn-text">Skipped: ${Object.entries(draft.skipped).map(([e, why]) => `${e} (${why})`).join("; ")}</div>`
         : nothing}
       <ul class="entities">
         ${shown.map((e) => html`<li><span>${e.name}</span> <span class="muted">${e.entity_id}</span></li>`)}
@@ -615,7 +779,8 @@ class PropSensePanel extends LitElement {
           <button class="primary" ?disabled=${this._busy} @click=${() => this._apply(false)}>Apply now</button>
         </div>
       </div>
-      ${this._data.settings.dry_run ? html`<div class="notice">Dry run is on: “Apply now” changes nothing.</div>` : nothing}
+      ${this._data.settings.dry_run ? html`<div class="notice">Dry run is on: “Apply now” changes nothing, and timers and schedules don't fire.</div>` : nothing}
+      ${this._renderRuntime()}
       ${!result
         ? html`<p class="muted">Nothing has been applied yet.</p>`
         : html`
@@ -631,6 +796,23 @@ class PropSensePanel extends LitElement {
               : nothing}
           `}
     `;
+  }
+
+  _renderRuntime() {
+    const items = this._data.runtime?.schedule?.schedules || [];
+    if (!items.length) return nothing;
+    return html`<ha-card class="pad">
+      <h3>Timers and schedules</h3>
+      ${items.map((it) => html`<div class="runtime">
+        <div><b>${it.label}</b> <span class="muted">· ${it.entities.length} entities</span></div>
+        ${it.timers?.length
+          ? html`<ul class="summary">${it.timers.map((t) => html`<li>${this._entityName(t.entity_id)}: ${this._rel(t.due)}</li>`)}</ul>`
+          : it.trigger === "state_for"
+            ? html`<div class="muted">No running timers: none of them is in that state.</div>`
+            : nothing}
+        ${it.next ? html`<div class="muted">Next run ${new Date(it.next).toLocaleString()} (${this._rel(it.next)})</div>` : nothing}
+      </div>`)}
+    </ha-card>`;
   }
 
   _renderTargets(type, targets) {
@@ -807,6 +989,20 @@ class PropSensePanel extends LitElement {
     .entities li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--divider-color); }
     .loading { padding: 24px; }
     summary { cursor: pointer; font-weight: 500; }
+    .summary { margin: 4px 0 0; padding-left: 18px; }
+    .templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .template { text-align: left; border-radius: 12px; padding: 14px; }
+    .template:hover { border-color: var(--primary-color); }
+    .sentence { margin-top: 8px; }
+    .sentence .line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    .sentence select { width: auto; }
+    .sentence input.small { width: 72px; }
+    .sentence input[type="time"] { width: auto; padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
+    .chip { padding: 4px 10px; border-radius: 14px; text-transform: capitalize; }
+    .chip.on { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
+    .runtime { padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
+    .runtime:last-child { border-bottom: none; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--primary-text-color); color: var(--card-background-color); padding: 10px 18px; border-radius: 20px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   `;
 }
 

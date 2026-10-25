@@ -304,6 +304,8 @@ class Plan:
     by_rule: dict[str, set[str]] = field(default_factory=dict)
     # entity id -> why a selected entity was dropped
     blocked: dict[str, str] = field(default_factory=dict)
+    # rule id -> entity id -> why that rule's selection skipped it
+    blocked_by_rule: dict[str, dict[str, str]] = field(default_factory=dict)
     # rule id -> action types that could not be evaluated (no provider, or
     # third-party actions are not allowed)
     dormant: dict[str, set[str]] = field(default_factory=dict)
@@ -362,12 +364,15 @@ def evaluate(
             if not rule.selects(f):
                 continue
             if spec.respects_blocked_domains and f.domain in settings.blocked_domains:
-                plan.blocked[f.entity_id] = f"domain '{f.domain}' is blocked"
+                why = f"domain '{f.domain}' is blocked"
+                plan.blocked[f.entity_id] = why
+                plan.blocked_by_rule.setdefault(rule.id, {})[f.entity_id] = why
                 continue
             if spec.accepts is not None and (
                 why := spec.accepts(config, f.entity_id)
             ):
                 plan.blocked[f.entity_id] = why
+                plan.blocked_by_rule.setdefault(rule.id, {})[f.entity_id] = why
                 continue
             plan.by_rule[rule.id].add(f.entity_id)
             for target in targets:

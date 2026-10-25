@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- New built-in action **Turn on or off on a timer or schedule**:
+  - **Auto-off timer**: turn entities off (or on) after they have been on (or off) for a set time. It watches the entity's state, so manual and in-Home-Assistant changes are treated the same. Deadlines are stored as absolute times, so restarts neither reset nor lose them, and the state is re-checked before acting.
+  - **Time of day** and **sunrise/sunset** (with an offset) triggers, optionally on chosen weekdays, with an optional catch-up window for triggers missed while Home Assistant was down.
+  - Locks, alarms and cameras are never touched (blocked domains); dry run stops everything from firing.
+- Panel: rule templates (auto-off, lights on at sunset, lights off at night, expose, dynamic group), a plain-language editor for the schedule action, rule cards that say what each rule does, running timers and next runs on the Status page, confirmation toasts, and the draft preview now shows only what that rule skipped.
+- Extension API: providers can implement `async_start`, `async_stop` and `status`.
+
 ## 0.4.0
 
 - Capabilities now cover more than lights: covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`). The selector field is simply called **Capabilities**.

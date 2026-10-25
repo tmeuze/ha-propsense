@@ -10,11 +10,13 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 
 ## Use cases
 
-Today PropSense has two actions: **expose to voice assistants** and **keep a group's members in sync**. The rest are what the rules-and-actions design is for, and they are planned, not built.
+Today PropSense has three actions: **expose to voice assistants**, **keep a group's members in sync**, and **turn on or off on a timer or schedule**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
 - **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
 - **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
+- **Auto-off timers** *(available)*: turn outlets off after they have been on for three hours. Survives restarts and respects manual switching.
+- **Time and sunset schedules** *(available)*: turn lights on at sunset, off at 23:00, on chosen weekdays.
 - **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
 - **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
 - **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
@@ -74,6 +76,16 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 ### Group action
 
 The **Keep a group's members in sync** action targets a Home Assistant group helper. Pick an existing group to edit, or give a name (and type) and PropSense creates it. Either way the group gets the `[PropSense]` label. The rules are the single source of truth: members added by hand are removed on the next apply. Entities of the wrong domain for the group type, other group helpers, and blocked domains are skipped and listed in the status page. Editing members reloads the group briefly.
+
+### Timers and schedules
+
+The **Turn on or off on a timer or schedule** action has three triggers:
+
+- **After being on (or off) for a duration**: an auto-off timer. It watches the entity's state, so it makes no difference whether the entity was switched in Home Assistant or by hand; if it changes to the other state first, the timer is cancelled. Deadlines are stored as absolute times, so a restart neither resets nor loses them. If a deadline passes while Home Assistant is down, the entity is turned off after start-up, provided it is still on. Entities that are already on when PropSense first sees them start their timer then.
+- **At a time of day**, optionally on chosen weekdays.
+- **At sunrise or sunset**, with an offset in minutes.
+
+For time and sun triggers, "catch up" runs a trigger that was missed while Home Assistant was down, if it is within the window you choose (0 skips it). Entities already in the wanted state are left alone. Only domains that can be turned on and off are supported (lights, switches, fans, input booleans, humidifiers, media players, climate, remotes, sirens, water heaters). Locks, alarm panels and cameras are blocked by default, and dry run stops anything from firing. Active timers and the next run of each schedule appear on the Status page.
 
 ## Configure
 
