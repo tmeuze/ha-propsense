@@ -12,6 +12,7 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 
 Today PropSense has three actions: **expose to voice assistants**, **keep a group's members in sync**, and **turn on or off on a timer or schedule**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
+- **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
 - **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
 - **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
 - **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
@@ -50,7 +51,7 @@ A **rule** has:
 - an **action** (expose to one or more assistants),
 - an enabled switch.
 
-A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
+A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`, `integrations`, `manufacturers`, `models`, `entity_categories`, `name_patterns` and `label_patterns`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
 
 ### Semantics
 
@@ -72,6 +73,10 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 | `inherit_device_labels` | on | Entities inherit their device's labels. |
 | `inherit_area_labels` | off | Entities inherit their area's labels. |
 | `dry_run` | off | Compute and report the plan without applying it. |
+
+### Patterns and wildcards
+
+`name_patterns`, `label_patterns`, `manufacturers` and `models` accept `*` (any text) and `?` (one character), ignoring case. Name patterns are tried against both the entity id and its name, so `switch.*_plug` and `*outlet*` both work. Label patterns match label **names**, so `Expose: *` selects every label named like that, including ones you add later. Integrations match exactly (ignoring case). Entity categories are `primary` (no category), `config` and `diagnostic`.
 
 ### Group action
 

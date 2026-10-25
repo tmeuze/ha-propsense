@@ -18,6 +18,8 @@ except ImportError:  # 2026.9 and earlier
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .api import async_get_registry
 from .const import ASSISTANT_LABELS, ASSISTANTS, DOMAIN
@@ -94,6 +96,17 @@ def _action_types(manager) -> list[dict[str, Any]]:
     return out
 
 
+def _choices(hass: HomeAssistant) -> dict[str, list[str]]:
+    """Values the editor offers for the registry-based selector fields."""
+    integrations = {e.platform for e in er.async_get(hass).entities.values()}
+    devices = dr.async_get(hass).devices.values()
+    return {
+        "integrations": sorted(integrations),
+        "manufacturers": sorted({d.manufacturer for d in devices if d.manufacturer}),
+        "models": sorted({d.model for d in devices if d.model}),
+    }
+
+
 def _summaries(manager) -> dict[str, list[str]]:
     """Plain-language line per action of each rule, from the providers themselves."""
     out: dict[str, list[str]] = {}
@@ -139,6 +152,7 @@ async def ws_overview(hass, connection, msg) -> None:
         {
             "rules": manager.rules_raw,
             "summaries": _summaries(manager),
+            "choices": _choices(hass),
             "settings": manager.settings.to_dict(),
             "actions": _action_types(manager),
             "assistants": [

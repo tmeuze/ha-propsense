@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Six new selector fields, so rules need fewer labels:
+  - **Integrations** (where an entity comes from, for example `hue`).
+  - **Manufacturers** and **Models** of the entity's device, with wildcards.
+  - **Entity categories** (primary, config, diagnostic).
+  - **Name or entity id patterns** with `*` and `?` wildcards, matched against both the id and the name.
+  - **Label name patterns**, for example `Expose: *` matches every label that starts that way, whatever its id.
+- The editor groups the new fields under "More filters", offers the integrations, manufacturers and models you actually have, and the Explain tab shows these facts for an entity.
+
 ## 0.5.0
 
 - New built-in action **Turn on or off on a timer or schedule**:

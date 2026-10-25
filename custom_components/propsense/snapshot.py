@@ -10,6 +10,10 @@ groups relate in Home Assistant. Rules:
 * Group membership is read from a group entity's ``entity_id`` attribute
   (``group.*`` and the light, switch, fan and cover groups all expose it),
   expanded through nested groups.
+* Integration is the entity's platform; manufacturer and model come from its
+  device; the category is Home Assistant's entity category (``primary`` when
+  it has none); the name is what the entity is called in the UI. Label names
+  (for wildcard matching) come from the label registry.
 * Capabilities are tags read from the state of lights, covers, fans and
   climate entities (see ``capabilities_of``). Entities without a state, or of
   other domains, have none.
@@ -26,6 +30,7 @@ from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
     entity_registry as er,
+    label_registry as lr,
 )
 
 from .engine import EntityFacts, Settings
@@ -104,6 +109,13 @@ def capabilities_of(hass: HomeAssistant, entity_id: str) -> frozenset[str]:
     return frozenset(tags)
 
 
+def _display_name(hass: HomeAssistant, entry: er.RegistryEntry) -> str | None:
+    state = hass.states.get(entry.entity_id)
+    if state is not None:
+        return state.name
+    return entry.name or entry.original_name
+
+
 def expand_group(hass: HomeAssistant, group_id: str, _depth: int = 0) -> set[str]:
     """All entity ids inside a group, following nested groups."""
     if _depth > _MAX_GROUP_DEPTH:
@@ -127,6 +139,12 @@ def build_facts(
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
+    label_reg = lr.async_get(hass)
+
+    def label_names(ids: set[str]) -> frozenset[str]:
+        return frozenset(
+            label.name for lid in ids if (label := label_reg.async_get_label(lid))
+        )
 
     membership: dict[str, set[str]] = {}
     for gid in group_ids:
@@ -165,6 +183,14 @@ def build_facts(
                 device_class=entry.device_class or entry.original_device_class,
                 groups=frozenset(membership.get(entry.entity_id, ())),
                 capabilities=capabilities_of(hass, entry.entity_id),
+                integration=entry.platform,
+                manufacturer=device.manufacturer if device is not None else None,
+                model=device.model if device is not None else None,
+                entity_category=(
+                    entry.entity_category.value if entry.entity_category else "primary"
+                ),
+                name=_display_name(hass, entry),
+                label_names=label_names(labels),
             )
         )
 
@@ -177,6 +203,7 @@ def build_facts(
                 device_class=state.attributes.get("device_class"),
                 groups=frozenset(membership.get(state.entity_id, ())),
                 capabilities=capabilities_of(hass, state.entity_id),
+                name=state.name,
             )
         )
     return facts

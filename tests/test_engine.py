@@ -309,3 +309,57 @@ def test_accepts_filter_reports_why_an_entity_was_skipped():
     plan = evaluate([r], ENTITIES, Settings(), specs={"g": spec})
     assert plan.targets["g"]["grp"] == {"light.kitchen", "light.bedroom"}
     assert plan.blocked["lock.front"] == "domain 'lock' is blocked"
+
+
+# ------------------------------------------------- registry-based selectors
+
+
+def _f(entity_id="light.a", **kw):
+    return EntityFacts(entity_id=entity_id, **kw)
+
+
+def test_integration_matches_case_insensitively_and_any_of():
+    s = Selector.from_dict({"integrations": ["Hue", "zha"]})
+    assert s.matches(_f(integration="hue"))
+    assert s.matches(_f(integration="ZHA"))
+    assert not s.matches(_f(integration="mqtt"))
+    assert not s.matches(_f())  # no integration (state-only entity)
+
+
+def test_manufacturer_and_model_support_wildcards():
+    assert Selector.from_dict({"manufacturers": ["ikea*"]}).matches(_f(manufacturer="IKEA of Sweden"))
+    assert not Selector.from_dict({"manufacturers": ["ikea*"]}).matches(_f(manufacturer="Philips"))
+    assert not Selector.from_dict({"manufacturers": ["ikea*"]}).matches(_f())
+    assert Selector.from_dict({"models": ["TRADFRI*bulb*"]}).matches(_f(model="TRADFRI bulb E27"))
+
+
+def test_entity_category_primary_is_the_default():
+    primary = Selector.from_dict({"entity_categories": ["primary"]})
+    diag = Selector.from_dict({"entity_categories": ["diagnostic", "config"]})
+    assert primary.matches(_f())
+    assert not primary.matches(_f(entity_category="diagnostic"))
+    assert diag.matches(_f(entity_category="config"))
+    assert not diag.matches(_f())
+
+
+def test_name_patterns_match_the_entity_id_or_the_name():
+    s = Selector.from_dict({"name_patterns": ["switch.*_plug", "*outlet*"]})
+    assert s.matches(_f("switch.kitchen_plug"))
+    assert s.matches(_f("switch.x", name="Garage Outlet"))
+    assert not s.matches(_f("switch.kitchen_lamp", name="Lamp"))
+    assert not Selector.from_dict({"name_patterns": ["a*"]}).matches(_f("light.a"))  # id starts with light.
+
+
+def test_label_patterns_match_label_names_not_ids():
+    s = Selector.from_dict({"label_patterns": ["Expose: *"]})
+    assert s.matches(_f(labels=frozenset({"expose_novak"}), label_names=frozenset({"Expose: Novak"})))
+    assert s.matches(_f(label_names=frozenset({"expose: alexa"})))
+    assert not s.matches(_f(label_names=frozenset({"Needs battery"})))
+    assert not s.matches(_f())
+
+
+def test_new_fields_combine_with_the_old_ones_and_count_as_non_empty():
+    assert Selector.from_dict({"name_patterns": ["*"]}).is_empty is False
+    s = Selector.from_dict({"integrations": ["hue"], "domains": ["light"]})
+    assert s.matches(_f("light.a", integration="hue"))
+    assert not s.matches(_f("switch.a", integration="hue"))
