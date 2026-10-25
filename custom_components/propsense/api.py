@@ -68,6 +68,16 @@ class ActionType:
         """Return a reason if ``entity_id`` can't be part of this action's targets."""
         return None
 
+    async def async_start(self) -> None:
+        """Called when PropSense starts (built-in providers only). Resume timers here."""
+
+    async def async_stop(self) -> None:
+        """Called when PropSense stops or reloads (built-in providers only)."""
+
+    def status(self) -> dict[str, Any]:
+        """Optional runtime state for the panel's Status page (JSON-serialisable)."""
+        return {}
+
     async def async_sync(self, target: str) -> None:
         """Called after each applied run for a state target, changed or not.
 

@@ -232,6 +232,11 @@ class ExposureManager:
 
     async def async_start(self) -> None:
         await self._load_rules()
+        for type_id, action in self.registry.types.items():
+            if self.registry.is_builtin(type_id):
+                if hasattr(action, "is_dry_run"):
+                    action.is_dry_run = lambda: self.settings.dry_run
+                await action.async_start()
         saved = await self._store.async_load() or {}
         self._edge = saved.get("edge", {})
         self._seen = saved.get("seen", {})
@@ -262,6 +267,9 @@ class ExposureManager:
             )
 
     async def async_stop(self) -> None:
+        for type_id, action in self.registry.types.items():
+            if self.registry.is_builtin(type_id):
+                await action.async_stop()
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()

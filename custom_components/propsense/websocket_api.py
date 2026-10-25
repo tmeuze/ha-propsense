@@ -121,6 +121,11 @@ async def ws_overview(hass, connection, msg) -> None:
                 {"value": a, "label": ASSISTANT_LABELS.get(a, a)} for a in ASSISTANTS
             ],
             "last": manager.last.to_dict() if manager.last else None,
+            "runtime": {
+                type_id: status
+                for type_id, action in manager.registry.types.items()
+                if manager.registry.is_builtin(type_id) and (status := action.status())
+            },
             "defaults": Settings().to_dict(),
         },
     )
