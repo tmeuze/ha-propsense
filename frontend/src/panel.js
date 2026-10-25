@@ -9,6 +9,29 @@ const SELECTOR_FIELDS = [
   ["entities", "Entities"],
   ["groups", "Groups"],
   ["capabilities", "Capabilities"],
+  ["integrations", "Integrations"],
+  ["manufacturers", "Manufacturers"],
+  ["models", "Models"],
+  ["entity_categories", "Entity categories"],
+  ["name_patterns", "Name or entity id patterns"],
+  ["label_patterns", "Label name patterns"],
+];
+// Shown under "More filters" so the common ones stay uncluttered.
+const ADVANCED_FIELDS = [
+  "integrations", "manufacturers", "models", "entity_categories", "name_patterns", "label_patterns",
+];
+const FIELD_HELP = {
+  integrations: "Where the entity comes from, for example hue or zha.",
+  manufacturers: "Of the entity's device. Wildcards work: IKEA*.",
+  models: "Of the entity's device. Wildcards work.",
+  entity_categories: "Primary entities are the ones with no category. Config and diagnostic entities are the extras integrations add.",
+  name_patterns: "Matches the entity id or its name, ignoring case. Use * for any text and ? for one character, for example switch.*_plug or *outlet*.",
+  label_patterns: "Matches label names, ignoring case, for example Expose: * for every label that starts that way.",
+};
+const CATEGORY_OPTIONS = [
+  { value: "primary", label: "Primary (no category)" },
+  { value: "config", label: "Config" },
+  { value: "diagnostic", label: "Diagnostic" },
 ];
 const CAPABILITY_OPTIONS = [
   { value: "onoff", label: "Light: on/off only" },
@@ -534,6 +557,15 @@ class PropSensePanel extends LitElement {
         return { entity: { multiple: true } };
       case "capabilities":
         return { select: { multiple: true, options: CAPABILITY_OPTIONS } };
+      case "entity_categories":
+        return { select: { multiple: true, options: CATEGORY_OPTIONS } };
+      case "integrations":
+      case "manufacturers":
+      case "models":
+        return { select: { multiple: true, custom_value: true, options: this._data?.choices?.[field] || [] } };
+      case "name_patterns":
+      case "label_patterns":
+        return { select: { multiple: true, custom_value: true, options: [] } };
       default: {
         const domains = [...new Set(Object.keys(this.hass.states).map((e) => e.split(".")[0]))].sort();
         return { select: { multiple: true, custom_value: true, options: domains } };
@@ -543,17 +575,24 @@ class PropSensePanel extends LitElement {
 
   _renderSelectorFields(which) {
     const sel = this._editing[which];
-    return SELECTOR_FIELDS.map(
-      ([field, label]) => html`<div class="field">
-        <div class="label">${label}</div>
-        <ha-selector
-          .hass=${this.hass}
-          .selector=${this._selectorFor(field)}
-          .value=${sel[field] || []}
-          @value-changed=${(ev) => this._setSelector(which, field, ev.detail.value)}
-        ></ha-selector>
-      </div>`
-    );
+    const field = ([name, label]) => html`<div class="field">
+      <div class="label">${label}</div>
+      ${FIELD_HELP[name] ? html`<div class="muted help">${FIELD_HELP[name]}</div>` : nothing}
+      <ha-selector
+        .hass=${this.hass}
+        .selector=${this._selectorFor(name)}
+        .value=${sel[name] || []}
+        @value-changed=${(ev) => this._setSelector(which, name, ev.detail.value)}
+      ></ha-selector>
+    </div>`;
+    const main = SELECTOR_FIELDS.filter(([k]) => !ADVANCED_FIELDS.includes(k));
+    const more = SELECTOR_FIELDS.filter(([k]) => ADVANCED_FIELDS.includes(k));
+    const anyMore = more.some(([k]) => sel[k]?.length);
+    return html`${main.map(field)}
+      <details class="more" ?open=${anyMore}>
+        <summary>More filters: integration, manufacturer, name patterns…</summary>
+        ${more.map(field)}
+      </details>`;
   }
 
   _renderEditor() {
@@ -861,6 +900,10 @@ class PropSensePanel extends LitElement {
             · <b>Floor</b>: ${ex.floor_id ? this._floorName(ex.floor_id) : "none"}</div>
           <div><b>Groups</b>: ${ex.groups.map((g) => this._entityName(g)).join(", ") || "none"}</div>
           <div><b>Capabilities</b>: ${ex.capabilities.map((c) => this._valueName("capabilities", c)).join(", ") || "none"}</div>
+          <div><b>Integration</b>: ${ex.integration || "none"}
+            · <b>Manufacturer</b>: ${ex.manufacturer || "none"} · <b>Model</b>: ${ex.model || "none"}</div>
+          <div><b>Category</b>: ${ex.entity_category} · <b>Name</b>: ${ex.name || "none"}</div>
+          <div><b>Label names</b>: ${ex.label_names.join(", ") || "none"}</div>
         </ha-card>
         ${ex.rules.length ? ex.rules.map((r) => html`<ha-card class="pad">
           <div class="row"><b>${r.name}</b>
@@ -990,6 +1033,9 @@ class PropSensePanel extends LitElement {
     .loading { padding: 24px; }
     summary { cursor: pointer; font-weight: 500; }
     .summary { margin: 4px 0 0; padding-left: 18px; }
+    .help { margin: -2px 0 6px; }
+    details.more { margin-top: 8px; }
+    details.more > summary { margin-bottom: 8px; }
     .templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
     .template { text-align: left; border-radius: 12px; padding: 14px; }
     .template:hover { border-color: var(--primary-color); }

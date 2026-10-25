@@ -19,6 +19,7 @@ is not exposed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from typing import Any, Callable, Iterable, Mapping
 
 # Rough prompt cost of one exposed entity for an LLM conversation agent, from
@@ -36,7 +37,17 @@ SELECTOR_FIELDS = (
     "devices",
     "groups",
     "capabilities",
+    "integrations",
+    "manufacturers",
+    "models",
+    "entity_categories",
+    "name_patterns",
+    "label_patterns",
 )
+
+# Values of ``entity_categories``: Home Assistant's two categories, plus
+# "primary" for entities that have none.
+ENTITY_CATEGORIES = ("primary", "config", "diagnostic")
 
 # Capability tags derived from an entity's state (see snapshot.py). Matching is
 # any-of, like labels.
@@ -50,6 +61,14 @@ CAPABILITIES = (
     # climate
     "heat", "cool", "heat_cool", "auto", "dry", "fan_only", "target_temp",
 )
+
+
+def _glob(patterns: frozenset[str], value: str | None) -> bool:
+    """Case-insensitive shell-style match (``*`` and ``?``) of any pattern."""
+    if not value:
+        return False
+    folded = value.casefold()
+    return any(fnmatchcase(folded, p.casefold()) for p in patterns)
 
 
 def _fset(value: Any) -> frozenset[str]:
@@ -76,6 +95,13 @@ class EntityFacts:
     device_class: str | None = None
     groups: frozenset[str] = frozenset()
     capabilities: frozenset[str] = frozenset()
+    # Where the entity comes from, and how it is presented.
+    integration: str | None = None  # the entity's platform, e.g. "hue"
+    manufacturer: str | None = None  # from its device
+    model: str | None = None  # from its device
+    entity_category: str = "primary"  # primary, config or diagnostic
+    name: str | None = None
+    label_names: frozenset[str] = frozenset()  # names of the labels in ``labels``
 
     @property
     def domain(self) -> str:
@@ -93,6 +119,12 @@ class Selector:
     devices: frozenset[str] = frozenset()
     groups: frozenset[str] = frozenset()
     capabilities: frozenset[str] = frozenset()
+    integrations: frozenset[str] = frozenset()
+    manufacturers: frozenset[str] = frozenset()
+    models: frozenset[str] = frozenset()
+    entity_categories: frozenset[str] = frozenset()
+    name_patterns: frozenset[str] = frozenset()
+    label_patterns: frozenset[str] = frozenset()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Selector":
@@ -131,6 +163,24 @@ class Selector:
         if self.groups and not (self.groups & facts.groups):
             return False
         if self.capabilities and not (self.capabilities & facts.capabilities):
+            return False
+        if self.integrations and (facts.integration or "").casefold() not in {
+            i.casefold() for i in self.integrations
+        }:
+            return False
+        if self.manufacturers and not _glob(self.manufacturers, facts.manufacturer):
+            return False
+        if self.models and not _glob(self.models, facts.model):
+            return False
+        if self.entity_categories and facts.entity_category not in self.entity_categories:
+            return False
+        if self.name_patterns and not (
+            _glob(self.name_patterns, facts.entity_id) or _glob(self.name_patterns, facts.name)
+        ):
+            return False
+        if self.label_patterns and not any(
+            _glob(self.label_patterns, name) for name in facts.label_names
+        ):
             return False
         return True
 

@@ -406,6 +406,12 @@ class ExposureManager:
             "device_class": match.device_class,
             "groups": sorted(match.groups),
             "capabilities": sorted(match.capabilities),
+            "integration": match.integration,
+            "manufacturer": match.manufacturer,
+            "model": match.model,
+            "entity_category": match.entity_category,
+            "name": match.name,
+            "label_names": sorted(match.label_names),
             "rules": explain(rules, match, settings, self._specs(settings)),
         }
 
