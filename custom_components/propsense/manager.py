@@ -109,6 +109,7 @@ class ApplyResult:
     dormant: dict[str, list[str]] = field(default_factory=dict)
     # rule id -> entity ids it selected (not serialised: can be large)
     rule_entities: dict[str, set[str]] = field(default_factory=dict)
+    rule_skipped: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def assistants(self) -> dict[str, TargetResult]:
@@ -433,6 +434,7 @@ class ExposureManager:
                 blocked=dict(plan.blocked),
                 dormant={rid: sorted(t) for rid, t in plan.dormant.items()},
                 rule_entities=plan.by_rule,
+                rule_skipped=plan.blocked_by_rule,
             )
             _ = result.assistants  # expose is always reported, even when empty
 

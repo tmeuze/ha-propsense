@@ -91,7 +91,8 @@ def normalise(config: dict[str, Any]) -> dict[str, Any]:
         out["days"] = sorted(config.get("days") or [], key=WEEKDAYS.index)
         out["catch_up"] = int(config.get("catch_up_minutes") or 0)
         if trigger == "time":
-            out["at"] = str(config.get("at") or "")[:8]
+            at = str(config.get("at") or "")
+            out["at"] = f"{at}:00" if len(at) == 5 else at[:8]
         else:
             out["event"] = config.get("event") or "sunset"
             out["offset"] = int(config.get("offset_minutes") or 0)
