@@ -15,7 +15,26 @@ const SELECTOR_FIELDS = [
   ["entity_categories", "Entity categories"],
   ["name_patterns", "Name or entity id patterns"],
   ["label_patterns", "Label name patterns"],
+  ["states", "Current state"],
+  ["conditions", "Conditions on state or attributes"],
 ];
+const STATE_FIELDS = ["states", "conditions"];
+const STATE_OPTIONS = ["on", "off", "unavailable", "unknown", "open", "closed", "home", "not_home", "locked", "unlocked", "playing", "idle", "paused"];
+const OPS = [
+  ["<", "is below"], ["<=", "is at most"], [">", "is above"], [">=", "is at least"],
+  ["=", "is"], ["!=", "is not"], ["between", "is between"],
+];
+function parseCond(text) {
+  const [src = "state", op = "<", ...rest] = String(text).trim().split(/\s+/);
+  const source = src === "state" ? "state" : "attr";
+  const attr = src.startsWith("attr:") ? src.slice(5) : "";
+  if (op === "between") return { source, attr, op, a: rest[0] || "", b: rest[1] || "" };
+  return { source, attr, op, a: rest.join(" "), b: "" };
+}
+const condComplete = (c) =>
+  (c.source === "state" || c.attr.trim()) && String(c.a).trim() && (c.op !== "between" || String(c.b).trim());
+const condText = (c) =>
+  `${c.source === "state" ? "state" : `attr:${c.attr.trim()}`} ${c.op} ${c.op === "between" ? `${String(c.a).trim()} ${String(c.b).trim()}` : String(c.a).trim()}`;
 // Shown under "More filters" so the common ones stay uncluttered.
 const ADVANCED_FIELDS = [
   "integrations", "manufacturers", "models", "entity_categories", "name_patterns", "label_patterns",
@@ -27,6 +46,8 @@ const FIELD_HELP = {
   entity_categories: "Primary entities are the ones with no category. Config and diagnostic entities are the extras integrations add.",
   name_patterns: "Matches the entity id or its name, ignoring case. Use * for any text and ? for one character, for example switch.*_plug or *outlet*.",
   label_patterns: "Matches label names, ignoring case, for example Expose: * for every label that starts that way.",
+  states: "The entity's state right now, for example on or unavailable. Any of the values will do.",
+  conditions: "Matches if any of these hold. The rule re-checks whenever an entity's state changes across a condition.",
 };
 const CATEGORY_OPTIONS = [
   { value: "primary", label: "Primary (no category)" },
@@ -346,6 +367,7 @@ class PropSensePanel extends LitElement {
 
   _edit(rule) {
     this._choosing = false;
+    this._condDrafts = null;
     this._editing = { ...newRule(), ...JSON.parse(JSON.stringify(rule || newRule())) };
     for (const key of ["include", "exclude"]) {
       this._editing[key] = { ...emptySelector(), ...this._editing[key] };
@@ -576,6 +598,8 @@ class PropSensePanel extends LitElement {
       case "name_patterns":
       case "label_patterns":
         return { select: { multiple: true, custom_value: true, options: [] } };
+      case "states":
+        return { select: { multiple: true, custom_value: true, options: STATE_OPTIONS } };
       default: {
         const domains = [...new Set(Object.keys(this.hass.states).map((e) => e.split(".")[0]))].sort();
         return { select: { multiple: true, custom_value: true, options: domains } };
@@ -595,14 +619,67 @@ class PropSensePanel extends LitElement {
         @value-changed=${(ev) => this._setSelector(which, name, ev.detail.value)}
       ></ha-selector>
     </div>`;
-    const main = SELECTOR_FIELDS.filter(([k]) => !ADVANCED_FIELDS.includes(k));
+    const main = SELECTOR_FIELDS.filter(([k]) => !ADVANCED_FIELDS.includes(k) && !STATE_FIELDS.includes(k));
     const more = SELECTOR_FIELDS.filter(([k]) => ADVANCED_FIELDS.includes(k));
     const anyMore = more.some(([k]) => sel[k]?.length);
+    const anyState = STATE_FIELDS.some((k) => sel[k]?.length);
+    const stateField = ([name, label]) => name === "conditions" ? this._renderConditions(which, label) : field([name, label]);
     return html`${main.map(field)}
       <details class="more" ?open=${anyMore}>
         <summary>More filters: integration, manufacturer, name patterns…</summary>
         ${more.map(field)}
+      </details>
+      <details class="more" ?open=${anyState}>
+        <summary>Current state and attributes: battery below 20%, currently on…</summary>
+        ${SELECTOR_FIELDS.filter(([k]) => STATE_FIELDS.includes(k)).map(stateField)}
       </details>`;
+  }
+
+  _condRows(which) {
+    // Rows live here (not only in the rule) so half-filled ones survive edits.
+    if (!this._condDrafts) {
+      this._condDrafts = {
+        include: (this._editing.include.conditions || []).map(parseCond),
+        exclude: (this._editing.exclude.conditions || []).map(parseCond),
+      };
+    }
+    return this._condDrafts[which];
+  }
+
+  _setCondRows(which, rows) {
+    this._condDrafts[which] = rows;
+    this._setSelector(which, "conditions", rows.filter(condComplete).map(condText));
+  }
+
+  _renderConditions(which, label) {
+    const rows = this._condRows(which);
+    const edit = (i, patch) => this._setCondRows(which, rows.map((r, j) => (i === j ? { ...r, ...patch } : r)));
+    return html`<div class="field">
+      <div class="label">${label}</div>
+      <div class="muted help">${FIELD_HELP.conditions}</div>
+      ${rows.map((r, i) => html`<div class="line cond">
+        <select @change=${(e) => edit(i, { source: e.target.value })}>
+          <option value="state" ?selected=${r.source === "state"}>State</option>
+          <option value="attr" ?selected=${r.source === "attr"}>Attribute</option>
+        </select>
+        ${r.source === "attr"
+          ? html`<input type="text" class="attr" placeholder="battery_level" .value=${r.attr}
+              @input=${(e) => edit(i, { attr: e.target.value })} />`
+          : nothing}
+        <select @change=${(e) => edit(i, { op: e.target.value })}>
+          ${OPS.map(([v, t]) => html`<option value=${v} ?selected=${r.op === v}>${t}</option>`)}
+        </select>
+        <input type="text" class="val" .value=${r.a} placeholder=${r.op === "between" ? "from" : "value"}
+          @input=${(e) => edit(i, { a: e.target.value })} />
+        ${r.op === "between"
+          ? html`<span>and</span><input type="text" class="val" .value=${r.b} placeholder="to"
+              @input=${(e) => edit(i, { b: e.target.value })} />`
+          : nothing}
+        <button class="danger" type="button" @click=${() => this._setCondRows(which, rows.filter((_, j) => j !== i))}>Remove</button>
+        ${condComplete(r) ? nothing : html`<span class="warn-text">Incomplete: not used yet.</span>`}
+      </div>`)}
+      <button type="button" @click=${() => this._setCondRows(which, [...rows, { source: "state", attr: "", op: "<", a: "", b: "" }])}>Add condition</button>
+    </div>`;
   }
 
   _renderEditor() {
@@ -936,6 +1013,7 @@ class PropSensePanel extends LitElement {
             · <b>Manufacturer</b>: ${ex.manufacturer || "none"} · <b>Model</b>: ${ex.model || "none"}</div>
           <div><b>Category</b>: ${ex.entity_category} · <b>Name</b>: ${ex.name || "none"}</div>
           <div><b>Label names</b>: ${ex.label_names.join(", ") || "none"}</div>
+          <div><b>State</b>: ${ex.state ?? "none"}</div>
         </ha-card>
         ${ex.rules.length ? ex.rules.map((r) => html`<ha-card class="pad">
           <div class="row"><b>${r.name}</b>
@@ -1074,6 +1152,10 @@ class PropSensePanel extends LitElement {
     summary { cursor: pointer; font-weight: 500; }
     .summary { margin: 4px 0 0; padding-left: 18px; }
     .help { margin: -2px 0 6px; }
+    .line.cond { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+    .line.cond select { width: auto; }
+    .line.cond input.val { width: 110px; }
+    .line.cond input.attr { width: 150px; }
     details.more { margin-top: 8px; }
     details.more > summary { margin-bottom: 8px; }
     .templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }

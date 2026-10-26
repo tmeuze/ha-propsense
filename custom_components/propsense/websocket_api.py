@@ -23,7 +23,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .api import async_get_registry
 from .const import ASSISTANT_LABELS, ASSISTANTS, DOMAIN
-from .engine import SELECTOR_FIELDS, Settings
+from .engine import SELECTOR_FIELDS, Settings, parse_condition
 
 _SELECTOR = vol.Schema({vol.Optional(f): [str] for f in SELECTOR_FIELDS})
 _RULE = vol.Schema(
@@ -141,6 +141,12 @@ def _summaries(manager) -> dict[str, list[str]]:
 
 def _validate_rule(manager, raw: dict[str, Any]) -> dict[str, Any]:
     rule = _RULE(raw)
+    for which in ("include", "exclude"):
+        for text in rule[which].get("conditions", []):
+            try:
+                parse_condition(text)
+            except ValueError as err:
+                raise vol.Invalid(str(err)) from err
     for action in rule["actions"]:
         provider = manager.registry.get(action["type"])
         if provider is not None:

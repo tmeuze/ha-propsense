@@ -49,6 +49,7 @@ from .const import (
     ISSUE_TOO_MANY,
     RESYNC_INTERVAL,
     SIGNAL_UPDATED,
+    STATE_DEBOUNCE_SECONDS,
 )
 from .engine import (
     ActionSpec,
@@ -170,6 +171,17 @@ class ExposureManager:
         self._seen: dict[str, list[str]] = {}
         self._unsubs: list[Callable[[], None]] = []
         self._state_unsub: Callable[[], None] | None = None
+        # Rules that select on live state, and what each said about an entity
+        # last time, so a state change only re-runs the plan if it flips one.
+        self._state_rules: list[Rule] = []
+        self._state_seen: dict[tuple[str, str], bool] = {}
+        self._state_debouncer = Debouncer(
+            hass,
+            _LOGGER,
+            cooldown=STATE_DEBOUNCE_SECONDS,
+            immediate=False,
+            function=self._debounced_apply,
+        )
         self._debouncer = Debouncer(
             hass,
             _LOGGER,
@@ -210,6 +222,7 @@ class ExposureManager:
         """Replace all rules, persist them and re-evaluate soon."""
         self._rules = [dict(r) for r in rules]
         await self._rules_store.async_save({"rules": self._rules})
+        self._refresh_state_rules()
         self._track_group_states()
         self._debouncer.async_schedule_call()
 
@@ -246,6 +259,14 @@ class ExposureManager:
         self._edge = saved.get("edge", {})
         self._seen = saved.get("seen", {})
         self._unsubs.append(self.registry.async_add_listener(self._on_registry_change))
+        self._refresh_state_rules()
+        self._unsubs.append(
+            self.hass.bus.async_listen(
+                EVENT_STATE_CHANGED,
+                self._on_state_for_rules,
+                event_filter=self._state_matters,
+            )
+        )
         self._unsubs.append(
             self.hass.bus.async_listen(
                 EVENT_STATE_CHANGED,
@@ -282,6 +303,7 @@ class ExposureManager:
             self._state_unsub()
             self._state_unsub = None
         self._debouncer.async_cancel()
+        self._state_debouncer.async_cancel()
 
     # ------------------------------------------------------------ triggers
 
@@ -310,6 +332,43 @@ class ExposureManager:
             r.enabled and (r.include.capabilities or r.exclude.capabilities)
             for r in self.rules
         )
+
+    def _refresh_state_rules(self) -> None:
+        self._state_rules = [
+            r
+            for r in self.rules
+            if r.enabled and (r.include.uses_state or r.exclude.uses_state)
+        ]
+        self._state_seen.clear()
+
+    @callback
+    def _state_matters(self, data: Any) -> bool:
+        """Cheap filter: only when a rule selects on state, and the state or attributes moved."""
+        if not self._state_rules:
+            return False
+        new, old = data.get("new_state"), data.get("old_state")
+        if new is None or old is None:
+            return True
+        return new.state != old.state or new.attributes != old.attributes
+
+    @callback
+    def _on_state_for_rules(self, event: Event) -> None:
+        """Re-run the plan only if this entity's state flipped what a rule selects."""
+        entity_id = event.data["entity_id"]
+        facts = build_facts(
+            self.hass, self.settings, self._group_ids(self._state_rules), only={entity_id}
+        )
+        if not facts:
+            return
+        flipped = False
+        for rule in self._state_rules:
+            now = rule.selects(facts[0])
+            key = (rule.id, entity_id)
+            if self._state_seen.get(key, False) != now:
+                self._state_seen[key] = now
+                flipped = True
+        if flipped:
+            self._state_debouncer.async_schedule_call()
 
     @callback
     def _on_registry_change(self) -> None:
@@ -398,6 +457,13 @@ class ExposureManager:
             specs=self._specs(settings),
             extra_managed=self._seen,
         )
+        if rules_override is None:
+            # remember what each state-based rule says about every entity now
+            self._state_seen = {
+                (r.id, f.entity_id): r.selects(f)
+                for r in self._state_rules
+                for f in facts
+            }
         return plan, rules, settings
 
     async def _save_state(self) -> None:
@@ -426,6 +492,7 @@ class ExposureManager:
             "entity_category": match.entity_category,
             "name": match.name,
             "label_names": sorted(match.label_names),
+            "state": match.state,
             "rules": explain(rules, match, settings, self._specs(settings)),
         }
 

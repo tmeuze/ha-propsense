@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+- **State-based selection.** Two new selector fields read an entity's own state:
+  - **Current state**: any of a list of states (`on`, `unavailable`, ...).
+  - **Conditions** on the state or an attribute: `state < 20`, `attr:battery_level <= 15`, `state between 10 20`, `attr:hvac_action != idle`. Operators: `<`, `<=`, `>`, `>=`, `=`, `!=`, `between`. Any one condition may hold. A missing value never matches.
+- The plan re-runs when a state change flips what a rule selects, not on every state change: PropSense checks the one entity that changed against the rules that use state, and re-runs (after a 5 second quiet period) only if its answer changed. Rules without state fields cost nothing extra.
+- The editor has a "Current state and attributes" section with a row editor for conditions, and Explain shows an entity's state.
+
 ## 0.7.0
 
 - New built-in action **Ship numeric history to a metrics endpoint**: entities a rule selects (by label, integration, name pattern and so on) have their numeric states sent in the InfluxDB line protocol (for example to a VictoriaMetrics `/write` endpoint). Opt-in: nothing is sent until **Allow sending data off this instance** is turned on, and data goes only to the **Metrics URL** setting (default `https://vm-in.sp.a64.one/write`). No credentials are used or stored.

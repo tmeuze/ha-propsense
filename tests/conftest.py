@@ -17,6 +17,7 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 @pytest.fixture(autouse=True)
 def instant_debounce(monkeypatch):
     monkeypatch.setattr("custom_components.propsense.manager.DEBOUNCE_SECONDS", 0.0)
+    monkeypatch.setattr("custom_components.propsense.manager.STATE_DEBOUNCE_SECONDS", 0.0)
 
 
 async def settle(hass: HomeAssistant) -> None:

@@ -14,6 +14,8 @@ groups relate in Home Assistant. Rules:
   device; the category is Home Assistant's entity category (``primary`` when
   it has none); the name is what the entity is called in the UI. Label names
   (for wildcard matching) come from the label registry.
+* State and attributes are the entity's current ones, for the ``states`` and
+  ``conditions`` selector fields.
 * Capabilities are tags read from the state of lights, covers, fans and
   climate entities (see ``capabilities_of``). Entities without a state, or of
   other domains, have none.
@@ -109,6 +111,13 @@ def capabilities_of(hass: HomeAssistant, entity_id: str) -> frozenset[str]:
     return frozenset(tags)
 
 
+def _live(hass: HomeAssistant, entity_id: str) -> dict:
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {}
+    return {"state": state.state, "attributes": state.attributes}
+
+
 def _display_name(hass: HomeAssistant, entry: er.RegistryEntry) -> str | None:
     state = hass.states.get(entry.entity_id)
     if state is not None:
@@ -134,8 +143,12 @@ def expand_group(hass: HomeAssistant, group_id: str, _depth: int = 0) -> set[str
 
 
 def build_facts(
-    hass: HomeAssistant, settings: Settings, group_ids: set[str]
+    hass: HomeAssistant,
+    settings: Settings,
+    group_ids: set[str],
+    only: set[str] | None = None,
 ) -> list[EntityFacts]:
+    """Facts for every entity, or just those in ``only`` (a quick single-entity check)."""
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
@@ -154,7 +167,12 @@ def build_facts(
     facts: list[EntityFacts] = []
     seen: set[str] = set()
 
-    for entry in ent_reg.entities.values():
+    entries = (
+        [e for eid in only if (e := ent_reg.async_get(eid)) is not None]
+        if only is not None
+        else ent_reg.entities.values()
+    )
+    for entry in entries:
         if entry.disabled_by is not None:
             continue
         seen.add(entry.entity_id)
@@ -191,10 +209,15 @@ def build_facts(
                 ),
                 name=_display_name(hass, entry),
                 label_names=label_names(labels),
+                **_live(hass, entry.entity_id),
             )
         )
 
-    for state in hass.states.async_all():
+    for state in (
+        [s for eid in only if (s := hass.states.get(eid)) is not None]
+        if only is not None
+        else hass.states.async_all()
+    ):
         if state.entity_id in seen:
             continue
         facts.append(
@@ -204,6 +227,8 @@ def build_facts(
                 groups=frozenset(membership.get(state.entity_id, ())),
                 capabilities=capabilities_of(hass, state.entity_id),
                 name=state.name,
+                state=state.state,
+                attributes=state.attributes,
             )
         )
     return facts
