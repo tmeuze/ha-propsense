@@ -286,7 +286,11 @@ class Selector:
         return bool(self.states or self.conditions)
 
 
-DEFAULT_METRICS_URL = "https://vm-in.sp.a64.one/write"
+DEFAULT_METRICS_URL = "https://vm.in.a64.one/write"
+# Earlier default, retired: the name only resolves to an address the Home
+# Assistant network cannot reach. Installs that still have it saved (it was
+# stored when the integration was set up) move to the current default.
+LEGACY_METRICS_URLS = ("https://vm-in.sp.a64.one/write",)
 EXPOSE = "expose"
 DEFAULT_ASSISTANTS = frozenset({"conversation"})
 
@@ -436,8 +440,15 @@ class Settings:
             allow_external_data=bool(
                 data.get("allow_external_data", defaults.allow_external_data)
             ),
-            metrics_url=str(data.get("metrics_url") or defaults.metrics_url).strip(),
+            metrics_url=cls._metrics_url(data.get("metrics_url"), defaults.metrics_url),
         )
+
+    @staticmethod
+    def _metrics_url(value: Any, default: str) -> str:
+        url = str(value or "").strip()
+        if not url or url in LEGACY_METRICS_URLS:
+            return default
+        return url
 
     def to_dict(self) -> dict[str, Any]:
         return {

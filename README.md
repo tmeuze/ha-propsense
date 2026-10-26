@@ -110,7 +110,7 @@ For time and sun triggers, "catch up" runs a trigger that was missed while Home 
 
 ### Metrics shipping
 
-The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (default `https://vm-in.sp.a64.one/write`, a VictoriaMetrics endpoint). It is **off until you turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network.
+The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (default `https://vm.in.a64.one/write`, a VictoriaMetrics endpoint). It is **off until you turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network. PropSense verifies the endpoint's TLS certificate and never relaxes that check: with an HTTPS URL the certificate must be trusted by the machine Home Assistant runs on (for example one issued by your own CA).
 
 Each point looks like `homeassistant,area=Kitchen,device_class=temperature,domain=sensor,entity_id=sensor.kitchen_temp,unit_of_measurement=°C value=21.5 <ns timestamp>`. The area, device class and unit tags are optional.
 
