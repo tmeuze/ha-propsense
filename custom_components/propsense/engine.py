@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from functools import lru_cache
 from typing import Any, Callable, Iterable, Mapping
 
 # Rough prompt cost of one exposed entity for an LLM conversation agent, from
@@ -43,6 +44,8 @@ SELECTOR_FIELDS = (
     "entity_categories",
     "name_patterns",
     "label_patterns",
+    "states",
+    "conditions",
 )
 
 # Values of ``entity_categories``: Home Assistant's two categories, plus
@@ -69,6 +72,81 @@ def _glob(patterns: frozenset[str], value: str | None) -> bool:
         return False
     folded = value.casefold()
     return any(fnmatchcase(folded, p.casefold()) for p in patterns)
+
+
+# ---------------------------------------------------------- conditions
+#
+# A condition reads the entity's own state or one of its attributes:
+#   state < 20            attr:battery_level <= 15
+#   state = on            attr:hvac_action != idle
+#   state between 10 20   attr:brightness > 200
+# Ordering and ``between`` need numbers on both sides; ``=`` and ``!=`` compare
+# numbers numerically and anything else as text, ignoring case. A missing value
+# never satisfies a condition.
+
+CONDITION_OPS = ("between", "<=", ">=", "!=", "=", "<", ">")
+
+
+@dataclass(frozen=True)
+class Condition:
+    source: str  # "state" or an attribute name
+    op: str
+    a: str
+    b: str | None = None
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out and out not in (float("inf"), float("-inf")) else None
+
+
+@lru_cache(maxsize=512)
+def parse_condition(text: str) -> Condition:
+    """Parse ``<source> <op> <value>``; raises ValueError if it makes no sense."""
+    parts = str(text).strip().split(None, 2)
+    if len(parts) < 3:
+        raise ValueError(f"Expected '<state or attr:name> <operator> <value>', got {text!r}")
+    source, op, rest = parts
+    if source != "state" and not (source.startswith("attr:") and len(source) > 5):
+        raise ValueError(f"The left side must be 'state' or 'attr:<attribute>', got {source!r}")
+    if op not in CONDITION_OPS:
+        raise ValueError(f"Unknown operator {op!r}; use one of {', '.join(CONDITION_OPS)}")
+    name = "state" if source == "state" else source[5:]
+    if op == "between":
+        bounds = rest.split()
+        if len(bounds) != 2 or _number(bounds[0]) is None or _number(bounds[1]) is None:
+            raise ValueError("'between' needs two numbers, for example: state between 10 20")
+        return Condition(name, op, bounds[0], bounds[1])
+    if op in ("<", "<=", ">", ">=") and _number(rest) is None:
+        raise ValueError(f"'{op}' needs a number, got {rest!r}")
+    return Condition(name, op, rest.strip())
+
+
+def condition_holds(cond: Condition, facts: "EntityFacts") -> bool:
+    raw = facts.state if cond.source == "state" else facts.attributes.get(cond.source)
+    if raw is None:
+        return False
+    have = _number(raw)
+    if cond.op == "between":
+        lo, hi = float(cond.a), float(cond.b or 0)
+        return have is not None and min(lo, hi) <= have <= max(lo, hi)
+    if cond.op in ("<", "<=", ">", ">="):
+        want = float(cond.a)
+        if have is None:
+            return False
+        return {"<": have < want, "<=": have <= want, ">": have > want, ">=": have >= want}[cond.op]
+    want_num = _number(cond.a)
+    equal = (
+        have == want_num
+        if have is not None and want_num is not None
+        else str(raw).casefold() == cond.a.casefold()
+    )
+    return equal if cond.op == "=" else not equal
 
 
 def _fset(value: Any) -> frozenset[str]:
@@ -101,6 +179,9 @@ class EntityFacts:
     model: str | None = None  # from its device
     entity_category: str = "primary"  # primary, config or diagnostic
     name: str | None = None
+    # The entity's current state and attributes (for state-based selectors).
+    state: str | None = None
+    attributes: Mapping[str, Any] = field(default_factory=dict, compare=False)
     label_names: frozenset[str] = frozenset()  # names of the labels in ``labels``
 
     @property
@@ -125,6 +206,8 @@ class Selector:
     entity_categories: frozenset[str] = frozenset()
     name_patterns: frozenset[str] = frozenset()
     label_patterns: frozenset[str] = frozenset()
+    states: frozenset[str] = frozenset()
+    conditions: frozenset[str] = frozenset()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Selector":
@@ -182,7 +265,25 @@ class Selector:
             _glob(self.label_patterns, name) for name in facts.label_names
         ):
             return False
+        if self.states and (facts.state or "").casefold() not in {
+            v.casefold() for v in self.states
+        }:
+            return False
+        if self.conditions and not any(self._condition_holds(c, facts) for c in self.conditions):
+            return False
         return True
+
+    @staticmethod
+    def _condition_holds(text: str, facts: EntityFacts) -> bool:
+        try:
+            return condition_holds(parse_condition(text), facts)
+        except ValueError:
+            return False  # a malformed condition never matches (fail closed)
+
+    @property
+    def uses_state(self) -> bool:
+        """True if matching depends on live state, so state changes can matter."""
+        return bool(self.states or self.conditions)
 
 
 DEFAULT_METRICS_URL = "https://vm-in.sp.a64.one/write"

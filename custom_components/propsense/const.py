@@ -21,6 +21,9 @@ SIGNAL_UPDATED = f"{DOMAIN}_updated"
 # Registry events arrive in bursts (a label edit touches many entries), so
 # apply once after things settle.
 DEBOUNCE_SECONDS = 2.0
+# State changes can be frequent; rules that select on state re-run at most this
+# often (after the quiet period).
+STATE_DEBOUNCE_SECONDS = 5.0
 # Safety net for anything that changes without a registry event.
 RESYNC_INTERVAL = timedelta(hours=1)
 

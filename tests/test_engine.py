@@ -1,4 +1,6 @@
 """Policy tests for the pure rules engine (no Home Assistant needed)."""
+import pytest
+
 from custom_components.propsense.engine import (
     EXPOSE_SPEC,
     EntityFacts,
@@ -363,3 +365,60 @@ def test_new_fields_combine_with_the_old_ones_and_count_as_non_empty():
     s = Selector.from_dict({"integrations": ["hue"], "domains": ["light"]})
     assert s.matches(_f("light.a", integration="hue"))
     assert not s.matches(_f("switch.a", integration="hue"))
+
+
+# ------------------------------------------------------ state-based selectors
+
+from custom_components.propsense.engine import parse_condition  # noqa: E402
+
+
+def sf(state, entity_id="sensor.a", **attrs):
+    return EntityFacts(entity_id=entity_id, state=state, attributes=attrs)
+
+
+def test_states_match_any_of_ignoring_case():
+    s = Selector.from_dict({"states": ["On", "unavailable"]})
+    assert s.matches(sf("on")) and s.matches(sf("unavailable"))
+    assert not s.matches(sf("off")) and not s.matches(EntityFacts(entity_id="x.y"))
+
+
+@pytest.mark.parametrize(
+    "text,state,attrs,expected",
+    [
+        ("state < 20", "15", {}, True),
+        ("state < 20", "20", {}, False),
+        ("state <= 20", "20", {}, True),
+        ("state > 20.5", "21", {}, True),
+        ("state >= 5", "abc", {}, False),
+        ("state between 10 20", "15", {}, True),
+        ("state between 20 10", "15", {}, True),  # order does not matter
+        ("state between 10 20", "25", {}, False),
+        ("state = on", "ON", {}, True),
+        ("state != on", "off", {}, True),
+        ("state != on", "on", {}, False),
+        ("state = 21.0", "21", {}, True),  # numeric equality, not text
+        ("attr:battery_level < 20", "on", {"battery_level": 12}, True),
+        ("attr:battery_level < 20", "on", {"battery_level": "12"}, True),
+        ("attr:battery_level < 20", "on", {}, False),  # missing never matches
+        ("attr:battery_level != 5", "on", {}, False),
+        ("attr:hvac_action = heating", "heat", {"hvac_action": "Heating"}, True),
+        ("attr:friendly_name = Living room lamp", "on", {"friendly_name": "living room lamp"}, True),
+    ],
+)
+def test_conditions(text, state, attrs, expected):
+    assert Selector.from_dict({"conditions": [text]}).matches(sf(state, **attrs)) is expected
+
+
+def test_conditions_are_any_of_and_malformed_ones_never_match():
+    s = Selector.from_dict({"conditions": ["state < 5", "state > 90"]})
+    assert s.matches(sf("3")) and s.matches(sf("95")) and not s.matches(sf("50"))
+    for bad in ("garbage", "state ~ 3", "state < abc", "level < 3", "state between 1", "attr: < 3"):
+        with pytest.raises(ValueError):
+            parse_condition(bad)
+        assert not Selector.from_dict({"conditions": [bad]}).matches(sf("1"))
+
+
+def test_state_fields_make_a_selector_non_empty_and_flag_live_state():
+    s = Selector.from_dict({"states": ["on"]})
+    assert not s.is_empty and s.uses_state
+    assert not Selector.from_dict({"labels": ["x"]}).uses_state

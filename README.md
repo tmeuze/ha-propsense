@@ -52,7 +52,7 @@ A **rule** has:
 - an **action** (expose to one or more assistants),
 - an enabled switch.
 
-A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`, `integrations`, `manufacturers`, `models`, `entity_categories`, `name_patterns` and `label_patterns`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
+A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`, `integrations`, `manufacturers`, `models`, `entity_categories`, `name_patterns`, `label_patterns`, `states` and `conditions`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
 
 ### Semantics
 
@@ -78,6 +78,21 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 ### Patterns and wildcards
 
 `name_patterns`, `label_patterns`, `manufacturers` and `models` accept `*` (any text) and `?` (one character), ignoring case. Name patterns are tried against both the entity id and its name, so `switch.*_plug` and `*outlet*` both work. Label patterns match label **names**, so `Expose: *` selects every label named like that, including ones you add later. Integrations match exactly (ignoring case). Entity categories are `primary` (no category), `config` and `diagnostic`.
+
+### State-based selection
+
+`states` matches the entity's current state (any of a list, ignoring case). `conditions` read the state or an attribute:
+
+| Condition | Meaning |
+|---|---|
+| `state < 20` | the state is a number below 20 |
+| `attr:battery_level <= 15` | the attribute is a number at most 15 |
+| `state between 10 20` | a number from 10 to 20 (either order) |
+| `state = on`, `attr:hvac_action != idle` | equal or not equal; numbers compare as numbers, anything else as text ignoring case |
+
+Operators are `<`, `<=`, `>`, `>=`, `=`, `!=` and `between`. Any one condition may hold, and a missing state or attribute never matches (so `!=` does not match an entity that lacks the attribute).
+
+A selection that follows live state changes as entities change, so be deliberate about the action: an expose rule on `state = on` will expose and un-expose as things toggle. **Cost:** PropSense does not re-run the plan on every state change. When a state or attribute changes, it checks that one entity against the rules that use state, and re-runs (after a 5 second quiet period) only if the answer for that rule changed. Rules without state fields add no work.
 
 ### Group action
 
