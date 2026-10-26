@@ -87,6 +87,7 @@ class TargetResult:
     # `desired` when the plan was refused or this was a dry run).
     exposed: list[str] = field(default_factory=list)
     error: str | None = None
+    label: str = ""  # human-readable name of the target
 
     @property
     def count(self) -> int:
@@ -126,6 +127,7 @@ class ApplyResult:
                 "entities": r.desired,
                 "exposed_now": r.exposed,
                 "error": r.error,
+                "label": r.label or r.target,
             }
 
         return {
@@ -237,6 +239,8 @@ class ExposureManager:
             if self.registry.is_builtin(type_id):
                 if hasattr(action, "is_dry_run"):
                     action.is_dry_run = lambda: self.settings.dry_run
+                if hasattr(action, "get_settings"):
+                    action.get_settings = lambda: self.settings
                 await action.async_start()
         saved = await self._store.async_load() or {}
         self._edge = saved.get("edge", {})
@@ -368,8 +372,18 @@ class ExposureManager:
         return {
             type_id: action.spec()
             for type_id, action in self.registry.types.items()
-            if self.registry.is_builtin(type_id) or settings.allow_third_party_actions
+            if self.action_allowed(type_id, settings)
         }
+
+    def action_allowed(self, type_id: str, settings: Settings | None = None) -> bool:
+        """Whether an action type may run under the current settings."""
+        settings = settings or self.settings
+        action = self.registry.get(type_id)
+        if action is None:
+            return False
+        if action.needs_external_data and not settings.allow_external_data:
+            return False
+        return self.registry.is_builtin(type_id) or settings.allow_third_party_actions
 
     def compute_plan(
         self, rules_override: list[dict[str, Any]] | None = None
@@ -464,6 +478,7 @@ class ExposureManager:
                             target=target, desired=sorted(desired), error=str(err)
                         )
                         changed = False
+                    tres.label = action.target_label(target)
                     results[target] = tres
                     state_changed |= changed
 
@@ -508,7 +523,8 @@ class ExposureManager:
             return tres, previous is None or bool(add or remove)
 
         current = await action.async_current(target)
-        changes = plan_changes(current, desired, settings.max_exposed)
+        limit = action.size_limit(target, settings)
+        changes = plan_changes(current, desired, limit)
         tres = TargetResult(
             target=target,
             desired=sorted(desired),
@@ -539,7 +555,7 @@ class ExposureManager:
                     translation_placeholders={
                         "assistant": label,
                         "count": str(changes.desired_count),
-                        "max": str(settings.max_exposed),
+                        "max": str(limit),
                     },
                 )
             _LOGGER.warning(
@@ -547,7 +563,7 @@ class ExposureManager:
                 "left unchanged",
                 changes.desired_count,
                 label,
-                settings.max_exposed,
+                limit,
             )
             return tres, False
 

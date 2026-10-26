@@ -50,6 +50,8 @@ _SETTINGS = vol.Schema(
         vol.Optional("inherit_area_labels"): bool,
         vol.Optional("dry_run"): bool,
         vol.Optional("allow_third_party_actions"): bool,
+        vol.Optional("allow_external_data"): bool,
+        vol.Optional("metrics_url"): vol.All(str, vol.Match(r"^https?://\S+$")),
     }
 )
 
@@ -77,17 +79,24 @@ def _manager(hass: HomeAssistant, connection, msg) -> Any | None:
 
 
 def _action_types(manager) -> list[dict[str, Any]]:
-    allowed = manager.settings.allow_third_party_actions
+    settings = manager.settings
     out = []
     for type_id, action in sorted(manager.registry.types.items()):
         builtin = manager.registry.is_builtin(type_id)
+        if action.needs_external_data and not settings.allow_external_data:
+            requires = "external_data"
+        elif not builtin and not settings.allow_third_party_actions:
+            requires = "third_party"
+        else:
+            requires = None
         out.append(
             {
                 "type": type_id,
                 "name": action.name or type_id,
                 "mode": action.mode,
                 "builtin": builtin,
-                "available": builtin or allowed,
+                "available": requires is None,
+                "requires": requires,
                 "schema": _to_fields(
                     action.config_schema(), custom_serializer=cv.custom_serializer
                 ),

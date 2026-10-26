@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- New built-in action **Ship numeric history to a metrics endpoint**: entities a rule selects (by label, integration, name pattern and so on) have their numeric states sent in the InfluxDB line protocol (for example to a VictoriaMetrics `/write` endpoint). Opt-in: nothing is sent until **Allow sending data off this instance** is turned on, and data goes only to the **Metrics URL** setting (default `https://vm-in.sp.a64.one/write`). No credentials are used or stored.
+  - Only numeric states are sent (booleans as 1/0 if you ask), at most one point per entity per interval (default 60 s, latest value wins), batched every 30 s, and a rule may select at most 200 entities (adjustable up to 1000).
+  - If the endpoint is unreachable, points wait in a bounded in-memory buffer (5000 points) and the oldest are dropped when it is full. The buffer is not saved, so a restart loses what had not been sent. Dry run and withdrawing the permission discard the buffer and send nothing.
+  - The Status page shows the target, points sent, waiting and dropped, and the last error.
+- Actions can now have their own entity limit (the metrics cap) instead of the shared `max_exposed`.
+- Status page shows readable names for each action target instead of raw configuration.
+
 ## 0.6.0
 
 - Six new selector fields, so rules need fewer labels:
