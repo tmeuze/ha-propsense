@@ -4,7 +4,7 @@ Rules for Home Assistant entities, driven by labels, areas, floors, groups and m
 
 Version 0.1 has one action: **expose entities to voice assistants** (Assist, Alexa, Google Assistant).
 
-Example: label an entity `Expose: Novak`, add one rule that exposes everything with that label to Assist, and the entity appears in Assist's exposed list. Remove the label and it disappears.
+Example: label an entity `Expose: Voice`, add one rule that exposes everything with that label to Assist, and the entity appears in Assist's exposed list. Remove the label and it disappears.
 
 > **Rules are the single source of truth.** For every assistant PropSense manages, anything no rule selects is un-exposed, including entities you ticked by hand. Start with **dry run** on (see [Safe first run](#safe-first-run)).
 
@@ -13,7 +13,7 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 Today PropSense has four actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, and **ship numeric history to a metrics endpoint**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
-- **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
+- **Curated voice exposure** *(available)*: label entities `Expose: Voice` and only those reach that agent, which keeps an LLM's prompt small.
 - **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
 - **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
 - **Auto-off timers** *(available)*: turn outlets off after they have been on for three hours. Survives restarts and respects manual switching.
@@ -57,7 +57,7 @@ A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domain
 ### Semantics
 
 - Within one field, a list means **any of**.
-- Across fields, every non-empty field must match (**and**). Labels `Expose: Novak` plus area `Kitchen` means labelled *and* in the kitchen.
+- Across fields, every non-empty field must match (**and**). Labels `Expose: Voice` plus area `Kitchen` means labelled *and* in the kitchen.
 - An **empty selector matches nothing**, so a half-edited rule can never expose everything. An exclude-only rule also matches nothing.
 - Rules are **additive**. An entity is wanted if any enabled rule includes it. A rule's exclude only subtracts from that same rule.
 - Entities inherit their device's labels (default on) and optionally their area's labels (default off). An entity's area falls back to its device's area, and its floor comes from the area.
@@ -110,7 +110,7 @@ For time and sun triggers, "catch up" runs a trigger that was missed while Home 
 
 ### Metrics shipping
 
-The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (default `https://vm.in.a64.one/write`, a VictoriaMetrics endpoint). It is **off until you turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network. PropSense verifies the endpoint's TLS certificate and never relaxes that check: with an HTTPS URL the certificate must be trusted by the machine Home Assistant runs on (for example one issued by your own CA).
+The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (for example a VictoriaMetrics `/write` endpoint). There is no default: you set your own. It is **off until you set a Metrics URL and turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network. PropSense verifies the endpoint's TLS certificate and never relaxes that check: with an HTTPS URL the certificate must be trusted by the machine Home Assistant runs on (for example one issued by your own CA).
 
 Each point looks like `homeassistant,area=Kitchen,device_class=temperature,domain=sensor,entity_id=sensor.kitchen_temp,unit_of_measurement=°C value=21.5 <ns timestamp>`. The area, device class and unit tags are optional.
 

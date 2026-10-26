@@ -29,7 +29,7 @@ async def test_facts_carry_integration_device_category_name_and_label_names(hass
         manufacturer="IKEA",
         model="TRADFRI bulb",
     )
-    label = lr.async_get(hass).async_create("Expose: Novak")
+    label = lr.async_get(hass).async_create("Expose: Voice")
     dr.async_get(hass).async_update_device(device.id, labels={label.label_id})
     reg = er.async_get(hass)
     lamp = reg.async_get_or_create(
@@ -46,7 +46,7 @@ async def test_facts_carry_integration_device_category_name_and_label_names(hass
     assert (f.integration, f.manufacturer, f.model) == ("hue", "IKEA", "TRADFRI bulb")
     assert f.entity_category == "primary"
     assert f.name == "Reading lamp"
-    assert f.label_names == {"Expose: Novak"}  # inherited from the device
+    assert f.label_names == {"Expose: Voice"}  # inherited from the device
     assert facts[diag.entity_id].entity_category == "diagnostic"
 
 
@@ -59,13 +59,13 @@ async def test_state_only_entities_get_their_friendly_name(hass):
 async def test_rule_exposes_by_label_wildcard_and_integration(hass):
     reg = er.async_get(hass)
     labels = lr.async_get(hass)
-    novak = labels.async_create("Expose: Novak").label_id
+    voice = labels.async_create("Expose: Voice").label_id
     alexa = labels.async_create("Expose: Alexa").label_id
     other = labels.async_create("Needs battery").label_id
     a = reg.async_get_or_create("light", "hue", "a", suggested_object_id="a").entity_id
     b = reg.async_get_or_create("light", "hue", "b", suggested_object_id="b").entity_id
     c = reg.async_get_or_create("light", "hue", "c", suggested_object_id="c").entity_id
-    for entity_id, label in ((a, novak), (b, alexa), (c, other)):
+    for entity_id, label in ((a, voice), (b, alexa), (c, other)):
         reg.async_update_entity(entity_id, labels={label})
         hass.states.async_set(entity_id, "on")
 

@@ -1,9 +1,13 @@
 # Changelog
 
+## 0.8.2
+
+- **There is no default Metrics URL any more.** An earlier default pointed at one person's own infrastructure, which is meaningless (and wrong) for everyone else. Set your own in Settings. Nothing is sent without a URL, the permission cannot be turned on without one, and the Status page says so. Addresses that earlier versions saved as a default are cleared; a URL you typed yourself is never touched.
+- Examples and test fixtures no longer use personal names.
+
 ## 0.8.1
 
-- The default **Metrics URL** is now `https://vm.in.a64.one/write` (the earlier default, `https://vm-in.sp.a64.one/write`, is retired because that name only resolves to an address the Home Assistant network cannot use). Installs that still have the retired default saved move to the new one automatically; a URL you chose yourself is never changed. Nothing is sent unless "Allow sending data off this instance" is on.
-- Certificate verification is unchanged and is not weakened: the HTTPS certificate for the endpoint comes from your own CA setup and must be trusted by the machine Home Assistant runs on. Until it is, sends fail with a TLS error, which PropSense treats like any other failed send (points wait in the buffer and are retried).
+- Certificate verification is unchanged and is not weakened: with an HTTPS URL the endpoint's certificate must be trusted by the machine Home Assistant runs on. If it is not, sends fail with a TLS error, which PropSense treats like any other failed send (points wait in the buffer and are retried).
 
 ## 0.8.0
 
@@ -15,7 +19,7 @@
 
 ## 0.7.0
 
-- New built-in action **Ship numeric history to a metrics endpoint**: entities a rule selects (by label, integration, name pattern and so on) have their numeric states sent in the InfluxDB line protocol (for example to a VictoriaMetrics `/write` endpoint). Opt-in: nothing is sent until **Allow sending data off this instance** is turned on, and data goes only to the **Metrics URL** setting (default `https://vm.in.a64.one/write`; the earlier default was retired in 0.8.1). No credentials are used or stored.
+- New built-in action **Ship numeric history to a metrics endpoint**: entities a rule selects (by label, integration, name pattern and so on) have their numeric states sent in the InfluxDB line protocol (for example to a VictoriaMetrics `/write` endpoint). Opt-in: nothing is sent until **Allow sending data off this instance** is turned on, and data goes only to the **Metrics URL** setting, which you set yourself (there is no default). No credentials are used or stored.
   - Only numeric states are sent (booleans as 1/0 if you ask), at most one point per entity per interval (default 60 s, latest value wins), batched every 30 s, and a rule may select at most 200 entities (adjustable up to 1000).
   - If the endpoint is unreachable, points wait in a bounded in-memory buffer (5000 points) and the oldest are dropped when it is full. The buffer is not saved, so a restart loses what had not been sent. Dry run and withdrawing the permission discard the buffer and send nothing.
   - The Status page shows the target, points sent, waiting and dropped, and the last error.

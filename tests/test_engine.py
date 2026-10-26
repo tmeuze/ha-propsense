@@ -33,10 +33,10 @@ def rule(rid="r1", include=None, exclude=None, assistants=None, enabled=True):
 
 
 ENTITIES = [
-    facts("light.kitchen", labels=frozenset({"expose_novak"}), area_id="kitchen", floor_id="l1"),
-    facts("light.bedroom", labels=frozenset({"expose_novak"}), area_id="bedroom", floor_id="l2"),
+    facts("light.kitchen", labels=frozenset({"expose_voice"}), area_id="kitchen", floor_id="l1"),
+    facts("light.bedroom", labels=frozenset({"expose_voice"}), area_id="bedroom", floor_id="l2"),
     facts("switch.garage", labels=frozenset(), area_id="garage", floor_id="l1"),
-    facts("lock.front", labels=frozenset({"expose_novak"}), area_id="entry", floor_id="l1"),
+    facts("lock.front", labels=frozenset({"expose_voice"}), area_id="entry", floor_id="l1"),
     facts("sensor.temp", labels=frozenset({"other"}), area_id="kitchen", floor_id="l1", device_class="temperature"),
     facts("light.hall", labels=frozenset(), area_id="hall", floor_id="l1", groups=frozenset({"group.downstairs"})),
 ]
@@ -58,7 +58,7 @@ def test_exclude_only_rule_matches_nothing():
 
 
 def test_label_selects_and_blocked_domain_is_dropped():
-    plan = evaluate([rule(include={"labels": ["expose_novak"]})], ENTITIES, Settings())
+    plan = evaluate([rule(include={"labels": ["expose_voice"]})], ENTITIES, Settings())
     assert wanted(plan) == {"light.kitchen", "light.bedroom"}
     assert "lock.front" in plan.blocked
     assert "lock.front" not in wanted(plan)
@@ -79,7 +79,7 @@ def test_unblocking_a_domain_is_an_explicit_choice():
 def test_fields_are_anded_values_are_ored():
     # label AND floor: the bedroom light has the label but is on the wrong floor
     plan = evaluate(
-        [rule(include={"labels": ["expose_novak"], "floors": ["l1"]})], ENTITIES, Settings()
+        [rule(include={"labels": ["expose_voice"], "floors": ["l1"]})], ENTITIES, Settings()
     )
     assert wanted(plan) == {"light.kitchen"}
     # two areas are an OR
@@ -104,7 +104,7 @@ def test_groups_and_devices():
 
 def test_exclude_subtracts_from_the_same_rule_only():
     plan = evaluate(
-        [rule(include={"labels": ["expose_novak"]}, exclude={"areas": ["bedroom"]})],
+        [rule(include={"labels": ["expose_voice"]}, exclude={"areas": ["bedroom"]})],
         ENTITIES,
         Settings(),
     )
@@ -112,7 +112,7 @@ def test_exclude_subtracts_from_the_same_rule_only():
     # another rule can still pick the excluded entity back up
     plan = evaluate(
         [
-            rule("a", include={"labels": ["expose_novak"]}, exclude={"areas": ["bedroom"]}),
+            rule("a", include={"labels": ["expose_voice"]}, exclude={"areas": ["bedroom"]}),
             rule("b", include={"entities": ["light.bedroom"]}),
         ],
         ENTITIES,
@@ -155,7 +155,7 @@ def test_rule_targets_extend_the_managed_set():
 
 
 def test_evaluate_is_deterministic():
-    rules = [rule(include={"labels": ["expose_novak"]})]
+    rules = [rule(include={"labels": ["expose_voice"]})]
     assert evaluate(rules, ENTITIES, Settings()).desired == evaluate(rules, list(reversed(ENTITIES)), Settings()).desired
 
 
@@ -227,7 +227,7 @@ def test_legacy_assistants_become_an_expose_action():
 
 def test_explicit_empty_actions_do_nothing():
     r = Rule.from_dict(
-        {"id": "x", "name": "x", "include": {"labels": ["expose_novak"]}, "actions": []}
+        {"id": "x", "name": "x", "include": {"labels": ["expose_voice"]}, "actions": []}
     )
     plan = evaluate([r], ENTITIES, Settings())
     assert wanted(plan) == set()
@@ -237,7 +237,7 @@ def test_explicit_empty_actions_do_nothing():
 def test_actions_of_unknown_type_are_dormant_and_touch_nothing():
     r = action_rule(
         "g",
-        {"labels": ["expose_novak"]},
+        {"labels": ["expose_voice"]},
         [{"type": "grant", "config": {"children": ["kid1"]}}],
     )
     plan = evaluate([r], ENTITIES, Settings())  # only built-in specs
@@ -249,7 +249,7 @@ def test_actions_of_unknown_type_are_dormant_and_touch_nothing():
 def test_third_party_targets_and_block_list_opt_out():
     r = action_rule(
         "g",
-        {"labels": ["expose_novak"]},
+        {"labels": ["expose_voice"]},
         [{"type": "grant", "config": {"children": ["kid1"]}}],
     )
     plan = evaluate([r], ENTITIES, Settings(), specs={"grant": GRANT})
@@ -265,7 +265,7 @@ def test_third_party_targets_and_block_list_opt_out():
 def test_one_rule_can_run_several_actions():
     r = action_rule(
         "both",
-        {"labels": ["expose_novak"], "domains": ["light"]},
+        {"labels": ["expose_voice"], "domains": ["light"]},
         [
             {"type": "expose", "config": {"assistants": ["conversation"]}},
             {"type": "grant", "config": {"children": ["kid1"]}},
@@ -305,7 +305,7 @@ def test_accepts_filter_reports_why_an_entity_was_skipped():
     )
     r = action_rule(
         "g",
-        {"labels": ["expose_novak"]},
+        {"labels": ["expose_voice"]},
         [{"type": "g", "config": {}}],
     )
     plan = evaluate([r], ENTITIES, Settings(), specs={"g": spec})
@@ -354,7 +354,7 @@ def test_name_patterns_match_the_entity_id_or_the_name():
 
 def test_label_patterns_match_label_names_not_ids():
     s = Selector.from_dict({"label_patterns": ["Expose: *"]})
-    assert s.matches(_f(labels=frozenset({"expose_novak"}), label_names=frozenset({"Expose: Novak"})))
+    assert s.matches(_f(labels=frozenset({"expose_voice"}), label_names=frozenset({"Expose: Voice"})))
     assert s.matches(_f(label_names=frozenset({"expose: alexa"})))
     assert not s.matches(_f(label_names=frozenset({"Needs battery"})))
     assert not s.matches(_f())
@@ -424,14 +424,20 @@ def test_state_fields_make_a_selector_non_empty_and_flag_live_state():
     assert not Selector.from_dict({"labels": ["x"]}).uses_state
 
 
-def test_metrics_url_default_and_migration_of_the_retired_default():
-    from custom_components.propsense.engine import DEFAULT_METRICS_URL
+def test_metrics_url_has_no_default_and_clears_addresses_older_versions_saved(monkeypatch):
+    import hashlib
 
-    assert Settings().metrics_url == DEFAULT_METRICS_URL == "https://vm.in.a64.one/write"
-    assert Settings.from_dict({}).metrics_url == DEFAULT_METRICS_URL
-    assert Settings.from_dict({"metrics_url": ""}).metrics_url == DEFAULT_METRICS_URL
-    # the retired default (saved at setup by older versions) moves to the new one
-    assert Settings.from_dict({"metrics_url": "https://vm-in.sp.a64.one/write"}).metrics_url == DEFAULT_METRICS_URL
-    # a URL the user chose is never touched
-    custom = "http://10.0.1.3/write"
+    from custom_components.propsense import engine
+
+    assert Settings().metrics_url == ""
+    assert Settings.from_dict({}).metrics_url == ""
+    # an address an earlier version saved as its default is cleared (compared by hash)
+    legacy = "https://legacy.example/write"
+    monkeypatch.setattr(
+        engine, "LEGACY_METRICS_URL_HASHES", (hashlib.sha256(legacy.encode()).hexdigest(),)
+    )
+    assert Settings.from_dict({"metrics_url": legacy}).metrics_url == ""
+    # an address the user chose is never touched
+    custom = "http://10.1.2.3/write"
     assert Settings.from_dict({"metrics_url": custom}).metrics_url == custom
+    assert Settings.from_dict(Settings(metrics_url=custom).to_dict()).metrics_url == custom
