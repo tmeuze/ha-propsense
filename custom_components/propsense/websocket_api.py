@@ -51,7 +51,7 @@ _SETTINGS = vol.Schema(
         vol.Optional("dry_run"): bool,
         vol.Optional("allow_third_party_actions"): bool,
         vol.Optional("allow_external_data"): bool,
-        vol.Optional("metrics_url"): vol.All(str, vol.Match(r"^https?://\S+$")),
+        vol.Optional("metrics_url"): vol.Any("", vol.All(str, vol.Match(r"^https?://\S+$"))),
     }
 )
 
@@ -236,6 +236,14 @@ async def ws_update_settings(hass, connection, msg) -> None:
         settings = _SETTINGS(msg["settings"])
     except vol.Invalid as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    merged = Settings.from_dict({**manager.settings.to_dict(), **settings})
+    if merged.allow_external_data and not merged.metrics_url:
+        connection.send_error(
+            msg["id"],
+            "invalid_format",
+            "Set a Metrics URL before allowing data to leave this instance",
+        )
         return
     await manager.async_set_settings(settings)
     connection.send_result(msg["id"], {})

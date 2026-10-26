@@ -18,6 +18,7 @@ is not exposed.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from functools import lru_cache
@@ -286,11 +287,16 @@ class Selector:
         return bool(self.states or self.conditions)
 
 
-DEFAULT_METRICS_URL = "https://vm.in.a64.one/write"
-# Earlier default, retired: the name only resolves to an address the Home
-# Assistant network cannot reach. Installs that still have it saved (it was
-# stored when the integration was set up) move to the current default.
-LEGACY_METRICS_URLS = ("https://vm-in.sp.a64.one/write",)
+# There is deliberately no default: the endpoint belongs to whoever runs this, and
+# nothing may be sent until they set one.
+DEFAULT_METRICS_URL = ""
+# Addresses that earlier versions saved as a default were specific to one
+# installation. They are treated as "not set" and cleared; they are kept here
+# only as hashes.
+LEGACY_METRICS_URL_HASHES = (
+    "0f3d411b610628a5544c23a5f36cc33d78a90f259975791d9fb8c0fb209de6f5",
+    "148ca8f53fc57930e482881d2f618160a940ace6e9ce002807efccd053827524",
+)
 EXPOSE = "expose"
 DEFAULT_ASSISTANTS = frozenset({"conversation"})
 
@@ -446,7 +452,7 @@ class Settings:
     @staticmethod
     def _metrics_url(value: Any, default: str) -> str:
         url = str(value or "").strip()
-        if not url or url in LEGACY_METRICS_URLS:
+        if not url or hashlib.sha256(url.encode()).hexdigest() in LEGACY_METRICS_URL_HASHES:
             return default
         return url
 

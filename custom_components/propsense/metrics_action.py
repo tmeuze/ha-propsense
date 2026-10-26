@@ -354,6 +354,10 @@ class MetricsAction(ActionType):
         if self.is_dry_run():
             self._buffer.clear()
             return
+        if not settings.metrics_url:
+            self._buffer.clear()  # nowhere to send: keep nothing
+            self.last_error = "No Metrics URL is set (Settings)"
+            return
         session = async_get_clientsession(self._hass)
         while self._buffer:
             batch = [self._buffer[i] for i in range(min(BATCH_LINES, len(self._buffer)))]

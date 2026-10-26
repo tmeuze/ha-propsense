@@ -518,7 +518,7 @@ class PropSensePanel extends LitElement {
       ${rules.length
         ? rules.map((rule) => this._renderRuleCard(rule))
         : html`<p class="muted">No rules yet. A rule selects entities, for example everything labelled
-            “Expose: Novak”, and applies actions such as exposing them to Assist.</p>`}
+            “Expose: Voice”, and applies actions such as exposing them to Assist.</p>`}
     `;
   }
 
@@ -700,7 +700,7 @@ class PropSensePanel extends LitElement {
               <input
                 type="text"
                 .value=${r.name}
-                placeholder="For example: Novak voice"
+                placeholder="For example: Voice assistant"
                 @input=${(e) => this._setEditing({ name: e.target.value })}
               />
             </div>
@@ -937,7 +937,8 @@ class PropSensePanel extends LitElement {
     if (!m || !m.targets?.length) return nothing;
     return html`<ha-card class="pad">
       <h3>Metrics shipping</h3>
-      <div class="muted">Sending to <code>${m.url}</code> and nowhere else.</div>
+      ${m.url ? html`<div class="muted">Sending to <code>${m.url}</code> and nowhere else.</div>` : nothing}
+      ${m.url ? nothing : html`<div class="warn-text">No Metrics URL is set. Set one in Settings; nothing is sent until then.</div>`}
       ${m.targets.map((t) => html`<div>${t.label} · ${t.entities} entities</div>`)}
       <div>Sent ${m.sent} points · waiting to send ${m.buffered}${m.dropped ? html` · <span class="warn-text">dropped ${m.dropped}</span>` : nothing}</div>
       ${m.last_error
@@ -1086,8 +1087,8 @@ class PropSensePanel extends LitElement {
           "Warning: lets rules send entity data (numeric history) to the metrics URL below, and nowhere else. Nothing is sent until this is on and a rule uses it. There are no credentials: the endpoint should only accept posts from your network.")}
         <div class="field">
           <div class="label">Metrics URL</div>
-          <div class="muted">The only address data is ever sent to (InfluxDB line protocol, for example a VictoriaMetrics /write endpoint).</div>
-          <input type="text" .value=${s.metrics_url || ""}
+          <div class="muted">The only address data is ever sent to (InfluxDB line protocol, for example a VictoriaMetrics /write endpoint). There is no default: set yours before allowing data to leave.</div>
+          <input type="text" placeholder="https://metrics.example.com/write" .value=${s.metrics_url || ""}
             @input=${(e) => this._setSetting("metrics_url", e.target.value.trim())} />
         </div>
         ${check("allow_third_party_actions", "Allow third-party actions",

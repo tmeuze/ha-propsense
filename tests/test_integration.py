@@ -69,7 +69,7 @@ async def setup(hass: HomeAssistant, rules, settings=None) -> MockConfigEntry:
 
 @pytest.fixture
 def label(hass: HomeAssistant):
-    return lr.async_get(hass).async_create("Expose: Novak").label_id
+    return lr.async_get(hass).async_create("Expose: Voice").label_id
 
 
 async def test_label_rule_exposes_and_manual_exposure_is_overridden(hass, label):
@@ -237,7 +237,7 @@ async def test_options_flow_adds_a_rule_that_takes_effect(hass, label):
     # an empty selection is rejected
     bad = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {"name": "Novak", "enabled": True, "assistants": [ASSIST]},
+        {"name": "Voice", "enabled": True, "assistants": [ASSIST]},
     )
     assert bad["type"] is FlowResultType.FORM
     assert bad["errors"] == {"base": "empty_selector"}
@@ -245,7 +245,7 @@ async def test_options_flow_adds_a_rule_that_takes_effect(hass, label):
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            "name": "Novak",
+            "name": "Voice",
             "enabled": True,
             "assistants": [ASSIST],
             "include_labels": [label],

@@ -9,7 +9,7 @@ from .test_integration import exposed, make_entity, setup
 from custom_components.propsense.api import async_register_action
 
 
-def expose_rule(label, rid=None, name="Novak"):
+def expose_rule(label, rid=None, name="Voice"):
     rule = {
         "name": name,
         "include": {"labels": [label]},
@@ -33,7 +33,7 @@ async def test_overview_lists_rules_settings_and_action_types(hass, hass_ws_clie
 
 
 async def test_save_preview_and_delete_a_rule(hass, hass_ws_client):
-    label = lr.async_get(hass).async_create("Expose: Novak").label_id
+    label = lr.async_get(hass).async_create("Expose: Voice").label_id
     lamp = make_entity(hass, "light", "lamp", labels=[label])
     await setup(hass, [])
     client = await hass_ws_client(hass)
@@ -93,10 +93,10 @@ async def test_settings_update_persists(hass, hass_ws_client):
 
 
 async def test_explain_reports_each_rule(hass, hass_ws_client):
-    label = lr.async_get(hass).async_create("Expose: Novak").label_id
+    label = lr.async_get(hass).async_create("Expose: Voice").label_id
     lamp = make_entity(hass, "light", "lamp", labels=[label])
     lock = make_entity(hass, "lock", "front", labels=[label])
-    await setup(hass, [{**expose_rule(label, "r1"), "name": "Novak"}])
+    await setup(hass, [{**expose_rule(label, "r1"), "name": "Voice"}])
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id({"type": "propsense/explain", "entity_id": lamp})

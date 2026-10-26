@@ -14,14 +14,13 @@ from homeassistant.helpers import (
 )
 from homeassistant.util import dt as dt_util
 
-from custom_components.propsense.engine import DEFAULT_METRICS_URL
 from custom_components.propsense.metrics_action import line, numeric
 
 from .conftest import settle
 from .test_integration import make_entity, setup
 
-URL = DEFAULT_METRICS_URL
-ALLOW = {"allow_external_data": True}
+URL = "https://metrics.example.test/write"
+ALLOW = {"allow_external_data": True, "metrics_url": URL}
 
 
 @pytest.fixture
@@ -279,18 +278,33 @@ async def test_settings_validate_the_url_and_the_permission_is_listed(hass, hass
         result = (await client.receive_json())["result"]
         return next(a for a in result["actions"] if a["type"] == "metrics")
 
+    async def update(settings):
+        await client.send_json_auto_id({"type": "propsense/settings/update", "settings": settings})
+        return await client.receive_json()
+
     before = await metrics_type()
     assert before["builtin"] and not before["available"] and before["requires"] == "external_data"
 
-    await client.send_json_auto_id(
-        {"type": "propsense/settings/update", "settings": {"metrics_url": "ftp://x"}}
-    )
-    assert (await client.receive_json())["error"]["code"] == "invalid_format"
-    await client.send_json_auto_id(
-        {"type": "propsense/settings/update",
-         "settings": {"metrics_url": "http://10.0.1.3/write", "allow_external_data": True}}
-    )
-    assert (await client.receive_json())["success"]
+    assert (await update({"metrics_url": "ftp://x"}))["error"]["code"] == "invalid_format"
+    # there is no default URL, so the permission cannot be given without one
+    refused = await update({"allow_external_data": True})
+    assert refused["error"]["code"] == "invalid_format" and "Metrics URL" in refused["error"]["message"]
+    assert (await update({"metrics_url": "http://10.1.2.3/write", "allow_external_data": True}))["success"]
     await hass.async_block_till_done()
     after = await metrics_type()
     assert after["available"] and after["requires"] is None
+
+
+async def test_no_url_means_nothing_is_sent(hass, freezer, label, aioclient_mock):
+    aioclient_mock.post(URL, status=204)
+    temp = sensor(hass, "temp", label)
+    # permission on but no URL (e.g. edited by hand): never sends, says why
+    entry = await setup(hass, [rule(label)], {"allow_external_data": True})
+    await settle(hass)
+    hass.states.async_set(temp, "5")
+    await hass.async_block_till_done()
+    await tick(hass, freezer)
+    assert bodies(aioclient_mock) == []
+    assert entry.runtime_data.registry.get("metrics").status()["last_error"] == (
+        "No Metrics URL is set (Settings)"
+    )
