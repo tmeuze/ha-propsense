@@ -10,7 +10,7 @@ Example: label an entity `Expose: Novak`, add one rule that exposes everything w
 
 ## Use cases
 
-Today PropSense has three actions: **expose to voice assistants**, **keep a group's members in sync**, and **turn on or off on a timer or schedule**. The rest are what the rules-and-actions design is for, and they are planned, not built.
+Today PropSense has four actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, and **ship numeric history to a metrics endpoint**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
 - **Curated voice exposure** *(available)*: label entities `Expose: Novak` and only those reach that agent, which keeps an LLM's prompt small.
@@ -18,6 +18,7 @@ Today PropSense has three actions: **expose to voice assistants**, **keep a grou
 - **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
 - **Auto-off timers** *(available)*: turn outlets off after they have been on for three hours. Survives restarts and respects manual switching.
 - **Time and sunset schedules** *(available)*: turn lights on at sunset, off at 23:00, on chosen weekdays.
+- **Metrics shipping** *(available)*: label the sensors you care about and their numeric history is sent to VictoriaMetrics, with no YAML.
 - **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
 - **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
 - **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
@@ -91,6 +92,18 @@ The **Turn on or off on a timer or schedule** action has three triggers:
 - **At sunrise or sunset**, with an offset in minutes.
 
 For time and sun triggers, "catch up" runs a trigger that was missed while Home Assistant was down, if it is within the window you choose (0 skips it). Entities already in the wanted state are left alone. Only domains that can be turned on and off are supported (lights, switches, fans, input booleans, humidifiers, media players, climate, remotes, sirens, water heaters). Locks, alarm panels and cameras are blocked by default, and dry run stops anything from firing. Active timers and the next run of each schedule appear on the Status page.
+
+### Metrics shipping
+
+The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (default `https://vm-in.sp.a64.one/write`, a VictoriaMetrics endpoint). It is **off until you turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network.
+
+Each point looks like `homeassistant,area=Kitchen,device_class=temperature,domain=sensor,entity_id=sensor.kitchen_temp,unit_of_measurement=°C value=21.5 <ns timestamp>`. The area, device class and unit tags are optional.
+
+- **Cost:** PropSense listens only to the state changes of the entities selected, never to every event. Each entity emits at most one point per interval (60 s by default; the latest value wins) and points are posted in batches every 30 s. A rule may select at most 200 entities by default (up to 1000); a wider rule is refused and a repair issue is raised.
+- **What is sent:** numeric states only. `unknown`, `unavailable` and text are skipped; on/off states are sent as 1/0 only if you turn that on. Locks, alarm panels and cameras are blocked by default.
+- **If the endpoint is down:** points wait in a bounded in-memory buffer (5000) and are retried every 30 s; the oldest are dropped when it is full.
+- **Restarts:** the buffer is not saved, so a restart loses what had not been sent (at most one 30 s window, plus any outage).
+- **Dry run** and withdrawing the permission discard waiting points and send nothing.
 
 ## Configure
 

@@ -113,8 +113,8 @@
   },
   "issues": {
     "too_many_exposed": {
-      "title": "PropSense refused to expose too many entities",
-      "description": "The rules would expose {count} entities to {assistant}, above the limit of {max}. Exposure was left unchanged. Narrow the rules or raise the limit in the integration's settings."
+      "title": "PropSense refused to apply too many entities",
+      "description": "The rules would apply {count} entities to {assistant}, above the limit of {max}. Nothing was changed. Narrow the rules or raise the limit."
     }
   },
   "services": {

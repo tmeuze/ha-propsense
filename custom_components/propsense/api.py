@@ -52,6 +52,13 @@ class ActionType:
     name: str = ""
     mode: Literal["state", "edge"] = "state"
     respects_blocked_domains: bool = True
+    # True for actions that send data off this instance. They stay dormant until
+    # the user allows that in PropSense's settings.
+    needs_external_data: bool = False
+
+    def size_limit(self, target: str, settings: Any) -> int:
+        """Most entities one target may hold before PropSense refuses (0 = no limit)."""
+        return settings.max_exposed
 
     def config_schema(self) -> vol.Schema:
         """Schema of this action's config; also drives the rule editor form."""

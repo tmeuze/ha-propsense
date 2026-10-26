@@ -115,6 +115,16 @@ const TEMPLATES = [
       actions: [{ type: "group", config: { create_name: "", group_type: "light" } }],
     }),
   },
+  {
+    id: "metrics",
+    title: "Ship numeric history",
+    text: "Send the numeric history of entities (by label, integration, name…) to your metrics endpoint. Needs the permission in Settings.",
+    make: () => ({
+      name: "Ship metrics",
+      include: {},
+      actions: [{ type: "metrics", config: { min_interval_seconds: 60, include_booleans: false, tag_area: true, tag_device_class: true, tag_unit: true, max_entities: 200 } }],
+    }),
+  },
   { id: "blank", title: "Start from scratch", text: "An empty rule.", make: () => ({}) },
 ];
 
@@ -535,7 +545,7 @@ class PropSensePanel extends LitElement {
       <div class="sel">${include || html`<span class="warn-text">Selects nothing (no include fields).</span>`}</div>
       ${exclude ? html`<div class="sel muted">Except: ${exclude}</div>` : nothing}
       ${dormant
-        ? html`<div class="warn-text">Dormant action: ${dormant.join(", ")}. Needs a provider and “Allow third-party actions”.</div>`
+        ? html`<div class="warn-text">Dormant action: ${dormant.join(", ")}. Needs the provider, and the matching permission in Settings.</div>`
         : nothing}
     </ha-card>`;
   }
@@ -660,7 +670,7 @@ class PropSensePanel extends LitElement {
         <select @change=${(e) => this._setAction(i, { type: e.target.value, config: this._defaultConfig(e.target.value) })}>
           ${types.map(
             (t) => html`<option value=${t.type} ?selected=${t.type === action.type} ?disabled=${!t.available && t.type !== action.type}>
-              ${t.name}${t.available ? "" : " (enable third-party actions)"}
+              ${t.name}${t.available ? "" : t.requires === "external_data" ? " (allow sending data in Settings)" : " (enable third-party actions)"}
             </option>`
           )}
           ${current ? nothing : html`<option selected>${action.type} (not installed)</option>`}
@@ -669,7 +679,9 @@ class PropSensePanel extends LitElement {
       </div>
       ${action.type === "schedule" ? this._renderSchedule(action, i) : nothing}
       ${current && action.type !== "schedule"
-        ? html`${current.available ? nothing : html`<div class="warn-text">Dormant until third-party actions are allowed in Settings.</div>`}
+        ? html`${current.available ? nothing : html`<div class="warn-text">${current.requires === "external_data"
+            ? "Dormant: allow sending data off this instance in Settings first. Nothing is sent until you do."
+            : "Dormant until third-party actions are allowed in Settings."}</div>`}
           <ha-form
             .hass=${this.hass}
             .schema=${current.schema}
@@ -760,6 +772,12 @@ class PropSensePanel extends LitElement {
     group: "Existing group (to edit)",
     create_name: "Or create a group named",
     group_type: "Type of group to create",
+    min_interval_seconds: "Seconds between points per entity (at least)",
+    include_booleans: "Also send on/off as 1/0",
+    tag_area: "Tag points with the area",
+    tag_device_class: "Tag points with the device class",
+    tag_unit: "Tag points with the unit",
+    max_entities: "Most entities this rule may ship",
   };
 
   _renderPreview() {
@@ -837,10 +855,24 @@ class PropSensePanel extends LitElement {
     `;
   }
 
+  _renderMetrics() {
+    const m = this._data.runtime?.metrics;
+    if (!m || !m.targets?.length) return nothing;
+    return html`<ha-card class="pad">
+      <h3>Metrics shipping</h3>
+      <div class="muted">Sending to <code>${m.url}</code> and nowhere else.</div>
+      ${m.targets.map((t) => html`<div>${t.label} · ${t.entities} entities</div>`)}
+      <div>Sent ${m.sent} points · waiting to send ${m.buffered}${m.dropped ? html` · <span class="warn-text">dropped ${m.dropped}</span>` : nothing}</div>
+      ${m.last_error
+        ? html`<div class="warn-text">Last send failed: ${m.last_error}. Points wait in memory and are retried every 30 seconds.</div>`
+        : m.last_success ? html`<div class="muted">Last success ${new Date(m.last_success).toLocaleString()}</div>` : nothing}
+    </ha-card>`;
+  }
+
   _renderRuntime() {
     const items = this._data.runtime?.schedule?.schedules || [];
-    if (!items.length) return nothing;
-    return html`<ha-card class="pad">
+    if (!items.length) return this._renderMetrics();
+    return html`${this._renderMetrics()}<ha-card class="pad">
       <h3>Timers and schedules</h3>
       ${items.map((it) => html`<div class="runtime">
         <div><b>${it.label}</b> <span class="muted">· ${it.entities.length} entities</span></div>
@@ -858,7 +890,7 @@ class PropSensePanel extends LitElement {
     return Object.entries(targets || {}).map(
       ([target, r]) => html`<ha-card class="pad">
         <div class="row">
-          <div><b>${this._typeName(type)}</b> → ${this._targetName(type, target)}</div>
+          <div><b>${this._typeName(type)}</b> → ${r.label || this._targetName(type, target)}</div>
           <div>${r.count} entities${type === "expose" ? html` · ~${r.estimated_tokens} tokens` : nothing}</div>
         </div>
         ${r.refused ? html`<div class="warn-text">Refused: over the size limit. Nothing was changed.</div>` : nothing}
@@ -972,6 +1004,14 @@ class PropSensePanel extends LitElement {
         ${check("inherit_device_labels", "Entities inherit their device's labels")}
         ${check("inherit_area_labels", "Entities inherit their area's labels")}
         ${check("dry_run", "Dry run", "Compute and report the plan without applying it.")}
+        ${check("allow_external_data", "Allow sending data off this instance",
+          "Warning: lets rules send entity data (numeric history) to the metrics URL below, and nowhere else. Nothing is sent until this is on and a rule uses it. There are no credentials: the endpoint should only accept posts from your network.")}
+        <div class="field">
+          <div class="label">Metrics URL</div>
+          <div class="muted">The only address data is ever sent to (InfluxDB line protocol, for example a VictoriaMetrics /write endpoint).</div>
+          <input type="text" .value=${s.metrics_url || ""}
+            @input=${(e) => this._setSetting("metrics_url", e.target.value.trim())} />
+        </div>
         ${check("allow_third_party_actions", "Allow third-party actions",
           "Warning: other integrations can register actions that change things beyond voice exposure, such as granting entities to other Home Assistant instances. Rules using them stay dormant until this is on. Only enable it for integrations you trust.")}
       </ha-card>

@@ -185,6 +185,7 @@ class Selector:
         return True
 
 
+DEFAULT_METRICS_URL = "https://vm-in.sp.a64.one/write"
 EXPOSE = "expose"
 DEFAULT_ASSISTANTS = frozenset({"conversation"})
 
@@ -301,6 +302,10 @@ class Settings:
     # Third-party action types (registered by other integrations) stay dormant
     # until this is on, because they can do more than change exposure.
     allow_third_party_actions: bool = False
+    # Actions that send data off this instance (metrics shipping) stay dormant
+    # until this is on, and send to ``metrics_url`` and nowhere else.
+    allow_external_data: bool = False
+    metrics_url: str = DEFAULT_METRICS_URL
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Settings":
@@ -327,6 +332,10 @@ class Settings:
                     "allow_third_party_actions", defaults.allow_third_party_actions
                 )
             ),
+            allow_external_data=bool(
+                data.get("allow_external_data", defaults.allow_external_data)
+            ),
+            metrics_url=str(data.get("metrics_url") or defaults.metrics_url).strip(),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -338,6 +347,8 @@ class Settings:
             "inherit_area_labels": self.inherit_area_labels,
             "dry_run": self.dry_run,
             "allow_third_party_actions": self.allow_third_party_actions,
+            "allow_external_data": self.allow_external_data,
+            "metrics_url": self.metrics_url,
         }
 
 
