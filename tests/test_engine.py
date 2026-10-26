@@ -422,3 +422,16 @@ def test_state_fields_make_a_selector_non_empty_and_flag_live_state():
     s = Selector.from_dict({"states": ["on"]})
     assert not s.is_empty and s.uses_state
     assert not Selector.from_dict({"labels": ["x"]}).uses_state
+
+
+def test_metrics_url_default_and_migration_of_the_retired_default():
+    from custom_components.propsense.engine import DEFAULT_METRICS_URL
+
+    assert Settings().metrics_url == DEFAULT_METRICS_URL == "https://vm.in.a64.one/write"
+    assert Settings.from_dict({}).metrics_url == DEFAULT_METRICS_URL
+    assert Settings.from_dict({"metrics_url": ""}).metrics_url == DEFAULT_METRICS_URL
+    # the retired default (saved at setup by older versions) moves to the new one
+    assert Settings.from_dict({"metrics_url": "https://vm-in.sp.a64.one/write"}).metrics_url == DEFAULT_METRICS_URL
+    # a URL the user chose is never touched
+    custom = "http://10.0.1.3/write"
+    assert Settings.from_dict({"metrics_url": custom}).metrics_url == custom
