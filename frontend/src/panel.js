@@ -174,6 +174,16 @@ const TEMPLATES = [
     }),
   },
   {
+    id: "dashboard",
+    title: "Show on a dashboard",
+    text: "Build a dashboard section from a rule, for example the lights a guest or wall tablet may see. Dashboards stay in sync with the rule.",
+    make: () => ({
+      name: "Guest lights",
+      include: { domains: ["light"] },
+      actions: [{ type: "dashboard", config: { dashboard: "guest", title: "Lights", group_by: "area", audience: ["non-admins"] } }],
+    }),
+  },
+  {
     id: "run",
     title: "Run actions when something enters",
     text: "Notify or call a service when an entity starts matching, for example when it gets a label. First sight fires nothing.",
@@ -896,11 +906,15 @@ class PropSensePanel extends LitElement {
     on_enter: "When an entity enters the selection, run",
     on_leave: "When an entity leaves the selection, run",
     max_per_run: "Most entities handled per evaluation",
+    dashboard: "Dashboard name (used by the strategy)",
+    group_by: "Group entities by",
+    audience: "Who sees this section (everyone, admins, non-admins, or user ids)",
   };
   _actionHelp = {
     label: "Adds this label to every selected entity and removes it from entities that stop matching, even ones labelled by hand. The label is created if missing. Other rules can select on it.",
     aliases: "Adds these aliases to every selected entity and removes them from entities that stop matching. Other aliases are left alone.",
     flag: "Lists the selected entities in Repairs under your title; the issue disappears when nothing matches. Changes no entity.",
+    dashboard: "Lists the selected entities in a named section of a PropSense dashboard. Create the dashboard once with the strategy shown in the README (type custom:propsense, dashboard: <name>). Audience limits who is shown the section; it is not a security boundary.",
     run: "Runs your actions for each entity that starts (or stops) matching. Available in templates: entity_id, event (enter or leave) and name. Adding the rule fires nothing for entities that already match.",
   };
 

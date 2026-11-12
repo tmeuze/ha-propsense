@@ -66,6 +66,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_preview,
         ws_explain,
         ws_apply,
+        ws_dashboard_resolve,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -108,7 +109,7 @@ def _action_types(manager) -> list[dict[str, Any]]:
 def _choices(hass: HomeAssistant) -> dict[str, list[str]]:
     """Values the editor offers for the registry-based selector fields."""
     integrations = {e.platform for e in er.async_get(hass).entities.values()}
-    devices = dr.async_get(hass).devices.values()
+    devices = list(dr.async_get(hass).devices)
     return {
         "integrations": sorted(integrations),
         "manufacturers": sorted({d.manufacturer for d in devices if d.manufacturer}),
@@ -315,3 +316,32 @@ async def ws_apply(hass, connection, msg) -> None:
         return
     result = await manager.async_apply(dry_run=msg["dry_run"])
     connection.send_result(msg["id"], result.to_dict())
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "propsense/dashboard/resolve", vol.Required("dashboard"): str}
+)
+@callback
+def ws_dashboard_resolve(hass, connection, msg) -> None:
+    """Sections of a named dashboard for the calling user (any logged-in user).
+
+    The dashboard strategy runs in the viewer's browser, so this is not admin only.
+    It returns entity ids the caller can already read through the state API, filtered
+    by each section's audience, so it exposes nothing new.
+    """
+    from .dashboard_action import DASHBOARD, DashboardAction
+
+    provider = async_get_registry(hass).get(DASHBOARD)
+    if not isinstance(provider, DashboardAction):
+        connection.send_error(msg["id"], "not_loaded", "PropSense is not set up")
+        return
+    user = connection.user
+    connection.send_result(
+        msg["id"],
+        {
+            "dashboard": msg["dashboard"],
+            "sections": provider.resolve(
+                msg["dashboard"], user.id if user else None, bool(user and user.is_admin)
+            ),
+        },
+    )

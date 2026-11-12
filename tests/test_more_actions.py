@@ -240,3 +240,74 @@ async def test_ordinary_use_does_not_trip_the_breaker(hass):
     # and the alias really landed on every lamp (a provider error would be swallowed)
     assert all(aliases_of(hass, lamp) == {"x"} for lamp in lamps)
     assert all(r.error is None for t in entry.runtime_data.last.actions.values() for r in t.values())
+
+
+# ---------------------------------------------------------------- dashboard
+
+
+def dash_rule(include, **cfg):
+    config = {"dashboard": "Guest Panel", "title": "Lights", "group_by": "area", **cfg}
+    return rule(include, "dashboard", config)
+
+
+async def resolve(hass, hass_ws_client, user_admin=True, name="guest-panel"):
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": "propsense/dashboard/resolve", "dashboard": name})
+    return await client.receive_json()
+
+
+async def test_dashboard_sections_follow_the_rule_grouped_by_area(hass, hass_ws_client):
+    from homeassistant.helpers import area_registry as ar
+
+    kitchen = ar.async_get(hass).async_create("Kitchen")
+    lamp = make_entity(hass, "light", "lamp")
+    other = make_entity(hass, "light", "other")
+    er.async_get(hass).async_update_entity(lamp, area_id=kitchen.id)
+    await setup(hass, [dash_rule({"domains": ["light"]})])
+
+    msg = await resolve(hass, hass_ws_client)
+    assert msg["success"]
+    (section,) = msg["result"]["sections"]
+    assert section["title"] == "Lights"
+    groups = {g["name"]: g["entities"] for g in section["groups"]}
+    assert groups == {"Kitchen": [lamp], "No area": [other]}
+    assert [g["name"] for g in section["groups"]][-1] == "No area"  # fallback last
+
+
+async def test_dashboard_other_name_is_empty_and_disabled_rule_vanishes(hass, hass_ws_client):
+    lamp = make_entity(hass, "light", "lamp")
+    entry = await setup(hass, [dash_rule({"entities": [lamp]})])
+    assert (await resolve(hass, hass_ws_client, name="nothing"))["result"]["sections"] == []
+
+    rules = entry.runtime_data.rules_raw
+    rules[0]["enabled"] = False
+    await entry.runtime_data.async_set_rules(rules)
+    await settle(hass)
+    assert (await resolve(hass, hass_ws_client))["result"]["sections"] == []
+
+
+async def test_dashboard_audience_filters_by_user(hass, hass_ws_client, hass_admin_user):
+    from custom_components.propsense.dashboard_action import audience_matches
+
+    assert audience_matches([], "u1", False)
+    assert audience_matches(["everyone"], "u1", False)
+    assert audience_matches(["non-admins"], "u1", False)
+    assert not audience_matches(["non-admins"], "u1", True)
+    assert audience_matches(["admins"], "u1", True)
+    assert audience_matches(["u2", "u1"], "u1", False)
+    assert not audience_matches(["u2"], "u1", False)
+
+    lamp = make_entity(hass, "light", "lamp")
+    await setup(hass, [dash_rule({"entities": [lamp]}, audience=["non-admins"])])
+    # the test client is an admin, so a non-admin-only section is hidden from it
+    assert (await resolve(hass, hass_ws_client))["result"]["sections"] == []
+
+
+async def test_dashboard_non_admin_can_resolve(hass, hass_ws_client, hass_read_only_access_token):
+    lamp = make_entity(hass, "light", "lamp")
+    await setup(hass, [dash_rule({"entities": [lamp]}, audience=["non-admins"])])
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+    await client.send_json({"id": 1, "type": "propsense/dashboard/resolve", "dashboard": "guest-panel"})
+    msg = await client.receive_json()
+    assert msg["success"]
+    assert msg["result"]["sections"][0]["groups"][0]["entities"] == [lamp]
