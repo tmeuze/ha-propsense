@@ -24,7 +24,11 @@ from homeassistant.setup import async_setup_component
 from .actions import ExposeAction
 from .api import async_get_registry
 from .group_action import GroupMembersAction
+from .alias_action import AliasAction
+from .flag_action import FlagAction
+from .label_action import ApplyLabelAction
 from .metrics_action import MetricsAction
+from .run_action import RunActionsAction
 from .schedule_action import ScheduleAction
 from .const import DOMAIN
 from .panel import async_register_panel, async_remove_panel
@@ -59,6 +63,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     registry.register(GroupMembersAction(hass), builtin=True)
     registry.register(ScheduleAction(hass), builtin=True)
     registry.register(MetricsAction(hass), builtin=True)
+    registry.register(ApplyLabelAction(hass), builtin=True)
+    registry.register(AliasAction(hass), builtin=True)
+    registry.register(FlagAction(hass), builtin=True)
+    registry.register(RunActionsAction(hass), builtin=True)
     async_register_commands(hass)
     return True
 

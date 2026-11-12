@@ -146,6 +146,39 @@ const TEMPLATES = [
       actions: [{ type: "metrics", config: { min_interval_seconds: 60, include_booleans: false, tag_area: true, tag_device_class: true, tag_unit: true, max_entities: 200 } }],
     }),
   },
+  {
+    id: "label",
+    title: "Apply a label automatically",
+    text: "Tag entities from their metadata, for example every battery below 20% gets “Needs battery”.",
+    make: () => ({
+      name: "Auto label",
+      include: { conditions: ["attr:battery_level < 20"] },
+      actions: [{ type: "label", config: { name: "Needs battery" } }],
+    }),
+  },
+  {
+    id: "aliases",
+    title: "Give a voice alias",
+    text: "Selected entities also answer to an extra name in Assist, Alexa or Google.",
+    make: () => ({ name: "Voice alias", include: {}, actions: [{ type: "aliases", config: { aliases: [] } }] }),
+  },
+  {
+    id: "flag",
+    title: "Flag in Repairs (hygiene check)",
+    text: "List entities that match in Home Assistant's Repairs, for example lights with no label.",
+    make: () => ({
+      name: "Hygiene check",
+      include: { domains: ["light"] },
+      exclude: { label_patterns: ["*"] },
+      actions: [{ type: "flag", config: { title: "Lights without a label" } }],
+    }),
+  },
+  {
+    id: "run",
+    title: "Run actions when something enters",
+    text: "Notify or call a service when an entity starts matching, for example when it gets a label. First sight fires nothing.",
+    make: () => ({ name: "On enter", include: {}, actions: [{ type: "run", config: { on_enter: [], on_leave: [], max_per_run: 20 } }] }),
+  },
   { id: "blank", title: "Start from scratch", text: "An empty rule.", make: () => ({}) },
 ];
 
@@ -754,6 +787,7 @@ class PropSensePanel extends LitElement {
         </select>
         <button class="danger" @click=${() => this._removeAction(i)}>Remove</button>
       </div>
+      ${this._actionHelp[action.type] ? html`<div class="muted help">${this._actionHelp[action.type]}</div>` : nothing}
       ${action.type === "schedule" ? this._renderSchedule(action, i) : nothing}
       ${current && action.type !== "schedule"
         ? html`${current.available ? nothing : html`<div class="warn-text">${current.requires === "external_data"
@@ -855,6 +889,19 @@ class PropSensePanel extends LitElement {
     tag_device_class: "Tag points with the device class",
     tag_unit: "Tag points with the unit",
     max_entities: "Most entities this rule may ship",
+    name: "Label name",
+    aliases: "Aliases (type and press enter)",
+    title: "Title shown in Repairs",
+    message: "Extra text (optional)",
+    on_enter: "When an entity enters the selection, run",
+    on_leave: "When an entity leaves the selection, run",
+    max_per_run: "Most entities handled per evaluation",
+  };
+  _actionHelp = {
+    label: "Adds this label to every selected entity and removes it from entities that stop matching, even ones labelled by hand. The label is created if missing. Other rules can select on it.",
+    aliases: "Adds these aliases to every selected entity and removes them from entities that stop matching. Other aliases are left alone.",
+    flag: "Lists the selected entities in Repairs under your title; the issue disappears when nothing matches. Changes no entity.",
+    run: "Runs your actions for each entity that starts (or stops) matching. Available in templates: entity_id, event (enter or leave) and name. Adding the rule fires nothing for entities that already match.",
   };
 
   _renderPreview() {
