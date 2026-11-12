@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -46,7 +48,11 @@ from .const import (
     CONF_SETTINGS,
     DEBOUNCE_SECONDS,
     DOMAIN,
+    ISSUE_OSCILLATING,
     ISSUE_TOO_MANY,
+    OSCILLATION_PAUSE,
+    OSCILLATION_RUNS,
+    OSCILLATION_WINDOW,
     RESYNC_INTERVAL,
     SIGNAL_UPDATED,
     STATE_DEBOUNCE_SECONDS,
@@ -173,6 +179,8 @@ class ExposureManager:
         self._state_unsub: Callable[[], None] | None = None
         # Rules that select on live state, and what each said about an entity
         # last time, so a state change only re-runs the plan if it flips one.
+        self._changing_runs: deque[float] = deque()
+        self._paused_until = 0.0
         self._state_rules: list[Rule] = []
         self._state_seen: dict[tuple[str, str], bool] = {}
         self._state_debouncer = Debouncer(
@@ -512,6 +520,12 @@ class ExposureManager:
                 if rules_override is not None
                 else settings.dry_run if dry_run is None else dry_run
             )
+            paused = time.monotonic() < self._paused_until
+            if paused and not dry:
+                dry = True  # report only while paused (see _note_changes)
+            elif not dry and self._paused_until:
+                self._paused_until = 0.0
+                ir.async_delete_issue(self.hass, DOMAIN, ISSUE_OSCILLATING)
 
             result = ApplyResult(
                 dry_run=dry,
@@ -553,8 +567,37 @@ class ExposureManager:
                 if state_changed:
                     await self._save_state()
                 self.last = result
+                self._note_changes(result)
                 async_dispatcher_send(self.hass, SIGNAL_UPDATED)
             return result
+
+    def _note_changes(self, result: ApplyResult) -> None:
+        """Pause applying if rules keep changing things (they are probably feeding each other)."""
+        if not any(
+            r.added or r.removed for targets in result.actions.values() for r in targets.values()
+        ):
+            return
+        now = time.monotonic()
+        self._changing_runs.append(now)
+        while self._changing_runs and now - self._changing_runs[0] > OSCILLATION_WINDOW:
+            self._changing_runs.popleft()
+        if len(self._changing_runs) < OSCILLATION_RUNS:
+            return
+        self._changing_runs.clear()
+        self._paused_until = now + OSCILLATION_PAUSE
+        _LOGGER.warning(
+            "PropSense applied changes %d times within %d s; pausing for %d s. "
+            "Rules that apply labels may be feeding each other.",
+            OSCILLATION_RUNS, OSCILLATION_WINDOW, OSCILLATION_PAUSE,
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            ISSUE_OSCILLATING,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_OSCILLATING,
+        )
 
     async def _apply_target(
         self,

@@ -10,7 +10,7 @@ Example: label an entity `Expose: Voice`, add one rule that exposes everything w
 
 ## Use cases
 
-Today PropSense has four actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, and **ship numeric history to a metrics endpoint**. The rest are what the rules-and-actions design is for, and they are planned, not built.
+Today PropSense has eight actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, **ship numeric history to a metrics endpoint**, **apply a label**, **give a voice alias**, **flag in Repairs** and **run actions when an entity enters or leaves**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
 - **Curated voice exposure** *(available)*: label entities `Expose: Voice` and only those reach that agent, which keeps an LLM's prompt small.
@@ -19,10 +19,10 @@ Today PropSense has four actions: **expose to voice assistants**, **keep a group
 - **Auto-off timers** *(available)*: turn outlets off after they have been on for three hours. Survives restarts and respects manual switching.
 - **Time and sunset schedules** *(available)*: turn lights on at sunset, off at 23:00, on chosen weekdays.
 - **Metrics shipping** *(available)*: label the sensors you care about and their numeric history is sent to VictoriaMetrics, with no YAML.
-- **Run something when a label is applied** *(planned)*: Home Assistant has no trigger for "label added". An `edge` action would call a service or fire an event when an entity enters a selection.
-- **Auto-tagging** *(planned)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`.
-- **Voice aliases** *(planned)*: entities selected for a voice agent also get a standard alias.
-- **Hygiene rules** *(planned)*: exclude entities from the recorder by label, or flag entities that should be labelled but aren't.
+- **Run something when a label is applied** *(available)*: Home Assistant has no trigger for "label added". The run action fires your own actions when an entity starts or stops matching a rule.
+- **Auto-tagging** *(available)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`. Labels can feed other rules.
+- **Voice aliases** *(available)*: entities selected for a voice agent also get a standard alias.
+- **Hygiene rules** *(available, partly)*: flag entities that should be labelled but aren't, or that come from a retired integration, in Repairs. Excluding entities from the recorder is not possible at runtime and is not planned.
 - **Access tiers** *(planned)*: labels decide what a guest dashboard or a voice agent can see.
 - **Grant to child instances** *(planned)*: an action type provided by [ha-unity](https://github.com/tmeuze/ha-unity) through PropSense's extension API.
 
@@ -107,6 +107,14 @@ The **Turn on or off on a timer or schedule** action has three triggers:
 - **At sunrise or sunset**, with an offset in minutes.
 
 For time and sun triggers, "catch up" runs a trigger that was missed while Home Assistant was down, if it is within the window you choose (0 skips it). Entities already in the wanted state are left alone. Only domains that can be turned on and off are supported (lights, switches, fans, input booleans, humidifiers, media players, climate, remotes, sirens, water heaters). Locks, alarm panels and cameras are blocked by default, and dry run stops anything from firing. Active timers and the next run of each schedule appear on the Status page.
+
+### Labels, aliases, flags and event actions
+
+- **Apply a label** adds a label (created if missing) to every selected entity and removes it from entities that stop matching, so the rules are the single source of truth for that label. Only the entity's own labels change, not ones inherited from its device or area, and entities without a registry entry are skipped. Because other rules can select on the label, rules can feed each other (a rule labels batteries, another notifies when something gets the label).
+- **Give a voice alias** does the same for one or more aliases on an entity; its other aliases are never touched.
+- **Flag in Repairs** lists the selected entities under your title in Home Assistant's Repairs, and the issue goes away when nothing matches. Use a rule that selects what *shouldn't* exist, for example lights excluding any label (`label_patterns: *`).
+- **Run actions when an entity enters or leaves** runs ordinary Home Assistant actions (services, notifications, scripts, conditions) for each entity that starts or stops matching. In templates, `entity_id`, `event` (`enter` or `leave`) and `name` are available. The first time a rule is seen it only records what matches, so it never fires for entities that already match; a restart does not re-fire; and at most 20 entities (configurable) run per evaluation.
+- **Loop breaker:** rules that apply labels can chase each other. If applying changed something 20 times within a minute, PropSense pauses for five minutes (it still reports what it would do) and raises a Repairs issue, then resumes on its own.
 
 ### Metrics shipping
 

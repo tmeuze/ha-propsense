@@ -115,6 +115,14 @@
     "too_many_exposed": {
       "title": "PropSense refused to apply too many entities",
       "description": "The rules would apply {count} entities to {assistant}, above the limit of {max}. Nothing was changed. Narrow the rules or raise the limit."
+    },
+    "flagged": {
+      "title": "{title}",
+      "description": "{count} entities were flagged by a PropSense rule: {entities}.\n\n{message}"
+    },
+    "rules_oscillating": {
+      "title": "PropSense paused: rules keep changing things",
+      "description": "PropSense kept making changes in quick succession, which usually means rules are feeding each other (for example one rule applies a label that another rule excludes). Applying is paused for a few minutes and only reports. Check rules that apply labels, then press Apply now on the Status page."
     }
   },
   "services": {

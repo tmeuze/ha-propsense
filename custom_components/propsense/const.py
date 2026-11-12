@@ -28,3 +28,11 @@ STATE_DEBOUNCE_SECONDS = 5.0
 RESYNC_INTERVAL = timedelta(hours=1)
 
 ISSUE_TOO_MANY = "too_many_exposed"
+
+# Rules that feed each other (one applies a label another selects on) can chase
+# their own tail. If applying changed something this many times within the
+# window, applying pauses (reporting only) and a Repairs issue explains why.
+OSCILLATION_RUNS = 20
+OSCILLATION_WINDOW = 60.0
+OSCILLATION_PAUSE = 300.0
+ISSUE_OSCILLATING = "rules_oscillating"
