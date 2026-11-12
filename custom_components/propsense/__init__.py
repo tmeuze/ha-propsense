@@ -25,6 +25,7 @@ from .actions import ExposeAction
 from .api import async_get_registry
 from .group_action import GroupMembersAction
 from .alias_action import AliasAction
+from .dashboard_action import DashboardAction
 from .flag_action import FlagAction
 from .label_action import ApplyLabelAction
 from .metrics_action import MetricsAction
@@ -67,6 +68,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     registry.register(AliasAction(hass), builtin=True)
     registry.register(FlagAction(hass), builtin=True)
     registry.register(RunActionsAction(hass), builtin=True)
+    registry.register(DashboardAction(hass), builtin=True)
     async_register_commands(hass)
     return True
 

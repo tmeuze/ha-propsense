@@ -13,6 +13,7 @@ PANEL_URL_PATH = "propsense"
 _STATIC_URL = f"/{DOMAIN}_static"
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 _BUNDLE = "propsense-panel.js"
+_STRATEGY = "propsense-strategy.js"
 _STATIC_KEY = f"{DOMAIN}_static_registered"
 
 
@@ -22,6 +23,12 @@ async def async_register_panel(hass: HomeAssistant) -> None:
             [StaticPathConfig(_STATIC_URL, str(_FRONTEND_DIR), cache_headers=False)]
         )
         hass.data[_STATIC_KEY] = True
+
+    # The dashboard strategy must load for every user (guests and kiosks too), not
+    # only admins who open the panel.
+    strategy = _FRONTEND_DIR / _STRATEGY
+    strategy_version = int(strategy.stat().st_mtime) if strategy.exists() else 0
+    frontend.add_extra_js_url(hass, f"{_STATIC_URL}/{_STRATEGY}?v={strategy_version}")
 
     bundle = _FRONTEND_DIR / _BUNDLE
     # The mtime busts the browser cache when a new release ships a new bundle.

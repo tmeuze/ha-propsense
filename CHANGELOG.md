@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- New built-in action **Show on a dashboard**: rules fill named, titled sections of a dashboard, grouped by area, floor or domain, for an **audience** (everyone, admins, non-admins or specific users). A live dashboard strategy (`strategy: {type: custom:propsense, dashboard: <name>}`) builds the dashboard from the rules each time it loads, so nothing is stored and it cannot drift.
+- New websocket command `propsense/dashboard/resolve`, usable by any logged-in user (it returns only entities the caller can already read, filtered by audience).
+- Audiences are a presentation filter, not access control; the README says what each tool does and does not enforce.
+- Fixed a Home Assistant deprecation warning about iterating the device registry.
+
 ## 0.8.2
 
 - **There is no default Metrics URL any more.** An earlier default pointed at one person's own infrastructure, which is meaningless (and wrong) for everyone else. Set your own in Settings. Nothing is sent without a URL, the permission cannot be turned on without one, and the Status page says so. Addresses that earlier versions saved as a default are cleared; a URL you typed yourself is never touched.

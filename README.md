@@ -10,7 +10,7 @@ Example: label an entity `Expose: Voice`, add one rule that exposes everything w
 
 ## Use cases
 
-Today PropSense has eight actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, **ship numeric history to a metrics endpoint**, **apply a label**, **give a voice alias**, **flag in Repairs** and **run actions when an entity enters or leaves**. The rest are what the rules-and-actions design is for, and they are planned, not built.
+Today PropSense has nine actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, **ship numeric history to a metrics endpoint**, **apply a label**, **give a voice alias**, **flag in Repairs**, **run actions when an entity enters or leaves** and **show on a dashboard**. The rest are what the rules-and-actions design is for, and they are planned, not built.
 
 - **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
 - **Curated voice exposure** *(available)*: label entities `Expose: Voice` and only those reach that agent, which keeps an LLM's prompt small.
@@ -23,7 +23,7 @@ Today PropSense has eight actions: **expose to voice assistants**, **keep a grou
 - **Auto-tagging** *(available)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`. Labels can feed other rules.
 - **Voice aliases** *(available)*: entities selected for a voice agent also get a standard alias.
 - **Hygiene rules** *(available, partly)*: flag entities that should be labelled but aren't, or that come from a retired integration, in Repairs. Excluding entities from the recorder is not possible at runtime and is not planned.
-- **Access tiers** *(planned)*: labels decide what a guest dashboard or a voice agent can see.
+- **Dashboards and audiences** *(available)*: rules fill named dashboard sections, shown only to the audience you choose (admins, non-admins, or specific users). The dashboard is built live from the rules, so it cannot drift. See [Dashboards](#dashboards). A dashboard filter is not a security boundary.
 - **Grant to child instances** *(planned)*: an action type provided by [ha-unity](https://github.com/tmeuze/ha-unity) through PropSense's extension API.
 
 Similar tools exist for parts of this, for example label-based voice exposure in community integrations. PropSense aims to be the general engine: one selector model, safety guards, and an API other integrations can build actions on.
@@ -115,6 +115,26 @@ For time and sun triggers, "catch up" runs a trigger that was missed while Home 
 - **Flag in Repairs** lists the selected entities under your title in Home Assistant's Repairs, and the issue goes away when nothing matches. Use a rule that selects what *shouldn't* exist, for example lights excluding any label (`label_patterns: *`).
 - **Run actions when an entity enters or leaves** runs ordinary Home Assistant actions (services, notifications, scripts, conditions) for each entity that starts or stops matching. In templates, `entity_id`, `event` (`enter` or `leave`) and `name` are available. The first time a rule is seen it only records what matches, so it never fires for entities that already match; a restart does not re-fire; and at most 20 entities (configurable) run per evaluation.
 - **Loop breaker:** rules that apply labels can chase each other. If applying changed something 20 times within a minute, PropSense pauses for five minutes (it still reports what it would do) and raises a Repairs issue, then resumes on its own.
+
+### Dashboards
+
+The **Show on a dashboard** action puts a rule's entities in a titled section of a named dashboard, grouped by area, floor, domain or not at all. PropSense stores no dashboard layout: a small dashboard strategy asks PropSense for the current sections each time the dashboard loads, so a changed rule changes the dashboard, and the same rules give the same dashboard on any instance.
+
+1. Add a rule with the **Show on a dashboard** action: a dashboard name (for example `guest`), a section title, how to group, and an audience.
+2. Create a dashboard (Settings → Dashboards → Add), open it, choose the three-dot menu → Edit → raw configuration editor, and replace its contents with:
+
+```yaml
+strategy:
+  type: custom:propsense
+  dashboard: guest   # the name from the rule
+  title: Guest       # optional
+```
+
+Each rule section becomes a tab; each group (area, floor or domain) becomes a block of tiles. If the dashboard is empty for a viewer, it says so.
+
+**Audience** is `everyone` (default), `admins`, `non-admins`, or specific Home Assistant user ids; several can be combined. A kiosk or guest account that is not an admin sees only sections whose audience includes it. To make a dashboard visible only to non-admins, also switch off *Require admin* and hide it from the sidebar in the dashboard's settings as you prefer.
+
+**This is not access control.** A dashboard only chooses what to show. Every logged-in user can still read every entity's state through Home Assistant's API, and Home Assistant has no per-entity permissions. Use audiences for tidy guest and kiosk views; use the voice **expose** action when you need a boundary that is enforced. Subnet-based login (the `trusted_networks` provider) lives in `configuration.yaml`, which no integration can edit; see Home Assistant's authentication documentation.
 
 ### Metrics shipping
 
