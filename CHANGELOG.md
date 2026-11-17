@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- **Rules tab redesign.** Rules are grouped into collapsible sections by what they do (voice and assistants, groups and tags, timers and schedules, dashboards, data export, automation and checks). A rule is listed under the section of its first action. There is a search box and filter chips (a chip matches a rule if any of its actions is in that category). Each rule card shows an icon chip for every action, an entity count, and an Off badge, with a colour accent per category. The collapsed state is remembered in the browser.
+- **Duplicate** a rule from its card to adjust a copy.
+- **Editor:** actions are numbered with icons and category colours, and a quick-add row adds any available action type in one click.
+- Several actions on one rule were already supported; the editor now says so. All actions of a rule share its selection. Use separate rules when actions need different entities.
+
 ## 0.10.0
 
 - New built-in action **Show on a dashboard**: rules fill named, titled sections of a dashboard, grouped by area, floor or domain, for an **audience** (everyone, admins, non-admins or specific users). A live dashboard strategy (`strategy: {type: custom:propsense, dashboard: <name>}`) builds the dashboard from the rules each time it loads, so nothing is stored and it cannot drift.
