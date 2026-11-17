@@ -18,6 +18,44 @@ const SELECTOR_FIELDS = [
   ["states", "Current state"],
   ["conditions", "Conditions on state or attributes"],
 ];
+// How actions are grouped on the Rules tab. A rule can carry several actions; it is listed
+// under the category of its first action, and the filter chips match any of its actions.
+const CATEGORIES = [
+  ["voice", "Voice and assistants", "mdi:microphone"],
+  ["groups", "Groups and tags", "mdi:tag-multiple"],
+  ["time", "Timers and schedules", "mdi:clock-outline"],
+  ["dashboards", "Dashboards", "mdi:view-dashboard"],
+  ["data", "Data export", "mdi:chart-line"],
+  ["automation", "Automation and checks", "mdi:robot-outline"],
+  ["other", "Other", "mdi:puzzle-outline"],
+];
+const ACTION_META = {
+  expose: ["voice", "mdi:microphone", "Expose"],
+  aliases: ["voice", "mdi:account-voice", "Alias"],
+  group: ["groups", "mdi:group", "Group"],
+  label: ["groups", "mdi:label", "Label"],
+  schedule: ["time", "mdi:clock-outline", "Schedule"],
+  dashboard: ["dashboards", "mdi:view-dashboard", "Dashboard"],
+  metrics: ["data", "mdi:chart-line", "Metrics"],
+  run: ["automation", "mdi:play-circle-outline", "Run"],
+  flag: ["automation", "mdi:flag", "Flag"],
+};
+const metaOf = (type) => ACTION_META[type] || ["other", "mdi:puzzle-outline", type];
+const categoryOf = (rule) => metaOf(rule.actions?.[0]?.type)[0];
+function loadCollapsed() {
+  try {
+    return JSON.parse(localStorage.getItem("propsense.collapsed") || "[]");
+  } catch (_) {
+    return [];
+  }
+}
+function saveCollapsed(list) {
+  try {
+    localStorage.setItem("propsense.collapsed", JSON.stringify(list));
+  } catch (_) {
+    /* storage unavailable: the choice just is not remembered */
+  }
+}
 const STATE_FIELDS = ["states", "conditions"];
 const STATE_OPTIONS = ["on", "off", "unavailable", "unknown", "open", "closed", "home", "not_home", "locked", "unlocked", "playing", "idle", "paused"];
 const OPS = [
@@ -235,11 +273,17 @@ class PropSensePanel extends LitElement {
     _showAll: { state: true },
     _choosing: { state: true },
     _toastMsg: { state: true },
+    _filter: { state: true },
+    _query: { state: true },
+    _collapsed: { state: true },
   };
 
   constructor() {
     super();
     this._tab = "rules";
+    this._filter = "all";
+    this._query = "";
+    this._collapsed = loadCollapsed();
     this._data = null;
     this._error = "";
     this._busy = false;
@@ -473,9 +517,11 @@ class PropSensePanel extends LitElement {
     });
   }
 
-  _addAction() {
+  _addAction(requested) {
     const type =
-      this._data.actions.find((a) => a.available)?.type || this._data.actions[0].type;
+      typeof requested === "string"
+        ? requested
+        : this._data.actions.find((a) => a.available)?.type || this._data.actions[0].type;
     const defaults = this._defaultConfig(type);
     this._setEditing({
       actions: [...this._editing.actions, { type, config: defaults }],
@@ -558,11 +604,69 @@ class PropSensePanel extends LitElement {
         <button class="primary" @click=${() => (this._choosing = !this._choosing)}>Add rule</button>
       </div>
       ${this._choosing ? this._renderChooser() : nothing}
-      ${rules.length
-        ? rules.map((rule) => this._renderRuleCard(rule))
-        : html`<p class="muted">No rules yet. A rule selects entities, for example everything labelled
-            “Expose: Voice”, and applies actions such as exposing them to Assist.</p>`}
+      ${this._renderRuleList(rules)}
     `;
+  }
+
+  _renderRuleList(rules) {
+    if (!rules.length) {
+      return html`<p class="muted">No rules yet. A rule selects entities, for example everything labelled
+        “Expose: Voice”, and applies actions such as exposing them to Assist.</p>`;
+    }
+    const q = this._query.trim().toLowerCase();
+    const hasCategory = (rule, cat) => (rule.actions || []).some((a) => metaOf(a.type)[0] === cat);
+    const matches = (rule) =>
+      (this._filter === "all" || hasCategory(rule, this._filter)) &&
+      (!q || rule.name.toLowerCase().includes(q) ||
+        (this._data.summaries?.[rule.id] || []).some((l) => l.toLowerCase().includes(q)));
+    const present = CATEGORIES.filter(([id]) => rules.some((r) => hasCategory(r, id)));
+    const shown = rules.filter(matches);
+    const sections = CATEGORIES.map(([id, label, icon]) => ({
+      id, label, icon, rules: shown.filter((r) => categoryOf(r) === id),
+    })).filter((sec) => sec.rules.length);
+    // With a filter on, a rule can match through a later action; list those under the filter.
+    const filtered = this._filter !== "all";
+    return html`
+      <div class="filters">
+        <input type="text" class="search" placeholder="Search rules" .value=${this._query}
+          @input=${(e) => (this._query = e.target.value)} />
+        <div class="chips">
+          <button class="chip ${filtered ? "" : "on"}" @click=${() => (this._filter = "all")}>All ${rules.length}</button>
+          ${present.map(([id, label, icon]) => html`<button class="chip ${this._filter === id ? "on" : ""}"
+            @click=${() => (this._filter = this._filter === id ? "all" : id)}>
+            <ha-icon .icon=${icon}></ha-icon>${label}</button>`)}
+        </div>
+      </div>
+      ${!shown.length ? html`<p class="muted">No rules match.</p>` : nothing}
+      ${filtered
+        ? html`<div class="rule-list">${shown.map((r) => this._renderRuleCard(r))}</div>`
+        : sections.map((sec) => {
+            const open = !this._collapsed.includes(sec.id) || !!q;
+            return html`<section class="section">
+              <button class="section-head" @click=${() => this._toggleSection(sec.id)} aria-expanded=${open}>
+                <ha-icon .icon=${open ? "mdi:chevron-down" : "mdi:chevron-right"}></ha-icon>
+                <ha-icon class="cat-icon" .icon=${sec.icon}></ha-icon>
+                <span class="section-title">${sec.label}</span>
+                <span class="count">${sec.rules.length}</span>
+              </button>
+              ${open ? html`<div class="rule-list">${sec.rules.map((r) => this._renderRuleCard(r))}</div>` : nothing}
+            </section>`;
+          })}
+    `;
+  }
+
+  _toggleSection(id) {
+    this._collapsed = this._collapsed.includes(id)
+      ? this._collapsed.filter((c) => c !== id)
+      : [...this._collapsed, id];
+    saveCollapsed(this._collapsed);
+  }
+
+  _duplicate(rule) {
+    const copy = JSON.parse(JSON.stringify(rule));
+    delete copy.id;
+    copy.name = `${rule.name} copy`;
+    this._edit(copy);
   }
 
   _renderChooser() {
@@ -589,14 +693,23 @@ class PropSensePanel extends LitElement {
     const include = this._summarise(rule.include);
     const exclude = this._summarise(rule.exclude);
     const dormant = this._data.last?.dormant?.[rule.name];
-    return html`<ha-card class="rule ${rule.enabled ? "" : "off"}">
+    const lines = this._data.summaries?.[rule.id] || [];
+    const count = this._countFor(rule);
+    return html`<ha-card class="rule cat-${categoryOf(rule)} ${rule.enabled ? "" : "off"}">
       <div class="rule-head">
-        <div>
-          <div class="rule-name">${rule.name}</div>
-          <div class="muted">${this._countFor(rule)} ${this._countFor(rule) === 1 ? "entity" : "entities"}</div>
-          <ul class="summary">
-            ${(this._data.summaries?.[rule.id] || []).map((line) => html`<li>${line}</li>`)}
-          </ul>
+        <div class="rule-main">
+          <div class="rule-title">
+            <span class="rule-name">${rule.name}</span>
+            <span class="pill">${count} ${count === 1 ? "entity" : "entities"}</span>
+            ${rule.enabled ? nothing : html`<span class="pill off-pill">Off</span>`}
+          </div>
+          <div class="action-chips">
+            ${(rule.actions || []).map((a, i) => {
+              const [, icon, short] = metaOf(a.type);
+              return html`<span class="action-chip" title=${lines[i] || ""}>
+                <ha-icon .icon=${icon}></ha-icon>${lines[i] || short}</span>`;
+            })}
+          </div>
         </div>
         <div class="rule-actions">
           <label class="switch" title="Enable or disable">
@@ -604,6 +717,7 @@ class PropSensePanel extends LitElement {
             ${rule.enabled ? "On" : "Off"}
           </label>
           <button @click=${() => this._edit(rule)}>Edit</button>
+          <button title="Make a copy to adjust" @click=${() => this._duplicate(rule)}>Duplicate</button>
           <button class="danger" @click=${() => this._delete(rule)}>Delete</button>
         </div>
       </div>
@@ -769,11 +883,16 @@ class PropSensePanel extends LitElement {
           </ha-card>
 
           <ha-card class="pad">
-            <div class="row"><h3>2 · What should happen?</h3>
-              <button @click=${this._addAction}>Add action</button></div>
+            <h3>2 · What should happen?</h3>
+            <p class="muted">A rule can do several things to the same entities, for example sync a group, apply a label and switch them on at sunset. Add as many actions as you like; they all share this selection.</p>
             ${r.actions.length
               ? r.actions.map((a, i) => this._renderAction(a, i))
               : html`<p class="warn-text">No actions: this rule does nothing.</p>`}
+            <div class="add-row">
+              <span class="muted">Add:</span>
+              ${this._data.actions.filter((t) => t.available).map((t) => html`<button class="chip"
+                @click=${() => this._addAction(t.type)}><ha-icon .icon=${metaOf(t.type)[1]}></ha-icon>${t.name}</button>`)}
+            </div>
           </ha-card>
         </div>
         <div class="col">${this._renderPreview()}</div>
@@ -785,8 +904,10 @@ class PropSensePanel extends LitElement {
     const types = this._data.actions;
     const current = types.find((t) => t.type === action.type);
     const labelFor = (schema) => (this._labels[schema.name] ?? schema.name.replaceAll("_", " "));
-    return html`<div class="action">
+    return html`<div class="action cat-${metaOf(action.type)[0]}">
       <div class="row">
+        <ha-icon class="cat-icon" .icon=${metaOf(action.type)[1]}></ha-icon>
+        <span class="action-no">${i + 1}</span>
         <select @change=${(e) => this._setAction(i, { type: e.target.value, config: this._defaultConfig(e.target.value) })}>
           ${types.map(
             (t) => html`<option value=${t.type} ?selected=${t.type === action.type} ?disabled=${!t.available && t.type !== action.type}>
@@ -1232,6 +1353,29 @@ class PropSensePanel extends LitElement {
     .chip.on { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
     .runtime { padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
     .runtime:last-child { border-bottom: none; }
+    .filters { margin: 4px 0 12px; }
+    .search { margin-bottom: 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; }
+    .filters .chip, .add-row .chip { text-transform: none; }
+    .chip ha-icon, .action-chip ha-icon { --mdc-icon-size: 16px; }
+    .section { margin-bottom: 8px; }
+    .section-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: none; border-radius: 8px; background: none; padding: 8px 4px; font-size: 1.05em; font-weight: 500; }
+    .section-head:hover { background: var(--secondary-background-color); }
+    .section-title { flex: 1; }
+    .count, .pill { font-size: 0.8em; padding: 2px 9px; border-radius: 10px; background: var(--secondary-background-color); color: var(--secondary-text-color); font-weight: 400; }
+    .off-pill { background: var(--warning-color, #b26a00); color: #fff; }
+    .cat-icon { color: var(--cat, var(--secondary-text-color)); }
+    .rule { border-left: 4px solid var(--cat, var(--divider-color)); }
+    .action { border-left: 3px solid var(--cat, var(--divider-color)); }
+    .cat-voice { --cat: #1e88e5; } .cat-groups { --cat: #43a047; } .cat-time { --cat: #fb8c00; }
+    .cat-dashboards { --cat: #8e24aa; } .cat-data { --cat: #00acc1; } .cat-automation { --cat: #e53935; } .cat-other { --cat: #757575; }
+    .rule-main { min-width: 0; flex: 1; }
+    .rule-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .action-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .action-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85em; padding: 3px 10px; border-radius: 12px; background: var(--secondary-background-color); }
+    .action-no { font-size: 0.8em; color: var(--secondary-text-color); min-width: 1.2em; }
+    .add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--primary-text-color); color: var(--card-background-color); padding: 10px 18px; border-radius: 20px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   `;
 }

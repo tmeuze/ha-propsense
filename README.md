@@ -54,6 +54,10 @@ A **rule** has:
 
 A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`, `integrations`, `manufacturers`, `models`, `entity_categories`, `name_patterns`, `label_patterns`, `states` and `conditions`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
 
+### One rule, several actions
+
+A rule is one selection plus any number of actions, so a single record can, for example, keep a group in sync, apply a label, turn the entities on at sunset and off at sunrise (two schedule actions, one per trigger). Edit the membership once and every action follows. Keep actions together when they should always apply to the same entities, and split them into separate rules when they need different selections or you want to switch one off on its own: the on/off switch belongs to the rule, not to an action. Rules can also feed each other through labels.
+
 ### Semantics
 
 - Within one field, a list means **any of**.
