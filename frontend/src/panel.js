@@ -224,7 +224,7 @@ const TEMPLATES = [
   {
     id: "run",
     title: "Run actions when something enters",
-    text: "Notify or call a service when an entity starts matching, for example when it gets a label. First sight fires nothing.",
+    text: "Notify or call a service when an entity starts matching, for example when it gets a label. Entities that already match when you add the rule do not fire it.",
     make: () => ({ name: "On enter", include: {}, actions: [{ type: "run", config: { on_enter: [], on_leave: [], max_per_run: 20 } }] }),
   },
   { id: "blank", title: "Start from scratch", text: "An empty rule.", make: () => ({}) },
@@ -611,7 +611,7 @@ class PropSensePanel extends LitElement {
   _renderRuleList(rules) {
     if (!rules.length) {
       return html`<p class="muted">No rules yet. A rule selects entities, for example everything labelled
-        “Expose: Voice”, and applies actions such as exposing them to Assist.</p>`;
+        “Expose: Voice”, and applies actions such as exposing them to Assist. Choose Add rule to start from a template.</p>`;
     }
     const q = this._query.trim().toLowerCase();
     const hasCategory = (rule, cat) => (rule.actions || []).some((a) => metaOf(a.type)[0] === cat);
@@ -721,10 +721,10 @@ class PropSensePanel extends LitElement {
           <button class="danger" @click=${() => this._delete(rule)}>Delete</button>
         </div>
       </div>
-      <div class="sel">${include || html`<span class="warn-text">Selects nothing (no include fields).</span>`}</div>
+      <div class="sel">${include || html`<span class="warn-text">Selects nothing yet. Fill in at least one field in the rule.</span>`}</div>
       ${exclude ? html`<div class="sel muted">Except: ${exclude}</div>` : nothing}
       ${dormant
-        ? html`<div class="warn-text">Dormant action: ${dormant.join(", ")}. Needs the provider, and the matching permission in Settings.</div>`
+        ? html`<div class="warn-text">Paused: ${dormant.join(", ")} is waiting for the integration that provides it, or for a permission in Settings.</div>`
         : nothing}
     </ha-card>`;
   }
@@ -887,7 +887,7 @@ class PropSensePanel extends LitElement {
             <p class="muted">A rule can do several things to the same entities, for example sync a group, apply a label and switch them on at sunset. Add as many actions as you like; they all share this selection.</p>
             ${r.actions.length
               ? r.actions.map((a, i) => this._renderAction(a, i))
-              : html`<p class="warn-text">No actions: this rule does nothing.</p>`}
+              : html`<p class="warn-text">No actions yet. Use the Add buttons below to choose what this rule does.</p>`}
             <div class="add-row">
               <span class="muted">Add:</span>
               ${this._data.actions.filter((t) => t.available).map((t) => html`<button class="chip"
@@ -922,8 +922,8 @@ class PropSensePanel extends LitElement {
       ${action.type === "schedule" ? this._renderSchedule(action, i) : nothing}
       ${current && action.type !== "schedule"
         ? html`${current.available ? nothing : html`<div class="warn-text">${current.requires === "external_data"
-            ? "Dormant: allow sending data off this instance in Settings first. Nothing is sent until you do."
-            : "Dormant until third-party actions are allowed in Settings."}</div>`}
+            ? "Paused until you allow sending data off this instance in Settings. Nothing is sent until you do."
+            : "Paused until you allow third-party actions in Settings."}</div>`}
           <ha-form
             .hass=${this.hass}
             .schema=${current.schema}
@@ -933,7 +933,7 @@ class PropSensePanel extends LitElement {
           ></ha-form>`
         : action.type === "schedule" || current
           ? nothing
-          : html`<div class="warn-text">This action type is not installed, so the rule is dormant.</div>`}
+          : html`<div class="warn-text">The integration that provides this action is not installed, so this action does nothing.</div>`}
     </div>`;
   }
 
@@ -1029,7 +1029,7 @@ class PropSensePanel extends LitElement {
     max_per_run: "Most entities handled per evaluation",
     dashboard: "Dashboard name (used by the strategy)",
     group_by: "Group entities by",
-    audience: "Who sees this section (everyone, admins, non-admins, or user ids)",
+    audience: "Who sees this section: type everyone, admins, non-admins, or a user id",
   };
   _actionHelp = {
     label: "Adds this label to every selected entity and removes it from entities that stop matching, even ones labelled by hand. The label is created if missing. Other rules can select on it.",

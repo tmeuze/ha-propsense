@@ -1,6 +1,6 @@
 # Plan: PropSense as a full integration
 
-Branch: `feat/full-integration`. Status: **proposal, nothing implemented.**
+This is the original design proposal and is kept for history. It has since been built, in versions 0.2.0 to 0.11.0, and several details changed along the way. For the current design see [architecture.md](architecture.md), and for what was decided and why see [decisions.md](decisions.md).
 
 ## Goals
 

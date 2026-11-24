@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Documentation: a shorter README that leads with what PropSense is for, and a `docs/` folder with the actions, selectors and settings, dashboards, metrics, architecture, ownership, security, credits, decisions and current state. Added `AGENTS.md`.
+
 ## 0.11.0
 
 - **Rules tab redesign.** Rules are grouped into collapsible sections by what they do (voice and assistants, groups and tags, timers and schedules, dashboards, data export, automation and checks). A rule is listed under the section of its first action. There is a search box and filter chips (a chip matches a rule if any of its actions is in that category). Each rule card shows an icon chip for every action, an entity count, and an Off badge, with a colour accent per category. The collapsed state is remembered in the browser.
