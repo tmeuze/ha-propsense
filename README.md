@@ -1,212 +1,120 @@
 # PropSense
 
-Rules for Home Assistant entities, driven by labels, areas, floors, groups and more. A rule selects entities and applies an action to them. It works like a soft ACL that you maintain by labelling things instead of ticking boxes.
+[![Validate](https://github.com/tmeuze/ha-propsense/actions/workflows/validate.yml/badge.svg)](https://github.com/tmeuze/ha-propsense/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/tmeuze/ha-propsense)](https://github.com/tmeuze/ha-propsense/releases)
+[![HACS](https://img.shields.io/badge/HACS-custom-orange.svg)](https://hacs.xyz)
 
-Version 0.1 has one action: **expose entities to voice assistants** (Assist, Alexa, Google Assistant).
+Rules for Home Assistant entities. A rule picks entities by label, area, integration, state and more, then does something with them: exposes them to voice assistants, keeps a group in sync, tags them, schedules them or shows them on a dashboard.
 
-Example: label an entity `Expose: Voice`, add one rule that exposes everything with that label to Assist, and the entity appears in Assist's exposed list. Remove the label and it disappears.
+**Status: in testing.** The rules, actions and panel work and are covered by tests, but the project is young and the extension API for other integrations may still change.
 
-> **Rules are the single source of truth.** For every assistant PropSense manages, anything no rule selects is un-exposed, including entities you ticked by hand. Start with **dry run** on (see [Safe first run](#safe-first-run)).
+This project comes with no warranty or guarantee of fitness for any purpose. Use it at your own risk.
+
+**LLM use:** this project is built and maintained with substantial AI assistance (Claude Code). Decisions and reviews are by a human, and generated code is reviewed before merge.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tmeuze/ha-propsense/main/docs/images/how-it-works.svg" alt="Entity facts feed a rule's selector, and the selected entities go to the rule's actions" width="860">
+</p>
+
+## What this does
+
+A PropSense rule has two parts: a selector and one or more actions. The selector describes a set of entities, for example "every switch labelled Outdoor, except the ones in the garage". The actions say what happens to that set. PropSense watches the registries and states in Home Assistant, so when a label, area or state changes, the set changes and every action follows.
+
+Rules are the single source of truth. If a rule says three lights belong in a group, the group has those three lights, and a light someone added by hand is removed on the next apply. That is what makes the result reproducible, and it is also why you should read [Safe first run](#safe-first-run) before you switch it on.
 
 ## Use cases
 
-Today PropSense has nine actions: **expose to voice assistants**, **keep a group's members in sync**, **turn on or off on a timer or schedule**, **ship numeric history to a metrics endpoint**, **apply a label**, **give a voice alias**, **flag in Repairs**, **run actions when an entity enters or leaves** and **show on a dashboard**. The rest are what the rules-and-actions design is for, and they are planned, not built.
+- **Curated voice exposure.** Label entities `Expose: Voice` and only those reach your assistant. That keeps the prompt of an LLM conversation agent small.
+- **Fewer labels.** Select by integration, manufacturer, model, name pattern or a label wildcard such as `Expose: *`, instead of tagging every entity yourself.
+- **Dynamic groups.** Keep a light or cover group equal to a rule, such as the living room lights that can change color.
+- **Timers and schedules.** Turn outlets off three hours after they were switched on, or lights on at sunset, and have it survive a restart.
+- **Auto-tagging.** Give every low battery sensor a `Needs battery` label, then let other rules react to that label.
+- **Guest and kiosk dashboards.** Build a dashboard from a rule and show it only to the people it is for.
+- **Hygiene checks.** List entities that should have a label and don't, in Home Assistant's Repairs.
 
-- **Fewer labels** *(available)*: select by integration, manufacturer, model, entity category, name pattern or a label name wildcard such as `Expose: *`, instead of tagging every entity.
-- **Curated voice exposure** *(available)*: label entities `Expose: Voice` and only those reach that agent, which keeps an LLM's prompt small.
-- **Per-assistant exposure** *(available)*: different rules for Assist, Alexa and Google Assistant.
-- **Dynamic groups** *(available)*: keep a light, switch, fan, cover, media player or valve group equal to a rule, for example the lights in the living room that can change white temperature, or every cover that can be set to a position. PropSense creates the group or edits one you pick, and labels it `[PropSense]`.
-- **Auto-off timers** *(available)*: turn outlets off after they have been on for three hours. Survives restarts and respects manual switching.
-- **Time and sunset schedules** *(available)*: turn lights on at sunset, off at 23:00, on chosen weekdays.
-- **Metrics shipping** *(available)*: label the sensors you care about and their numeric history is sent to VictoriaMetrics, with no YAML.
-- **Run something when a label is applied** *(available)*: Home Assistant has no trigger for "label added". The run action fires your own actions when an entity starts or stops matching a rule.
-- **Auto-tagging** *(available)*: apply a label from metadata, such as every battery sensor getting `Needs battery`, or everything in the garage getting `Outdoor`. Labels can feed other rules.
-- **Voice aliases** *(available)*: entities selected for a voice agent also get a standard alias.
-- **Hygiene rules** *(available, partly)*: flag entities that should be labelled but aren't, or that come from a retired integration, in Repairs. Excluding entities from the recorder is not possible at runtime and is not planned.
-- **Dashboards and audiences** *(available)*: rules fill named dashboard sections, shown only to the audience you choose (admins, non-admins, or specific users). The dashboard is built live from the rules, so it cannot drift. See [Dashboards](#dashboards). A dashboard filter is not a security boundary.
-- **Grant to child instances** *(planned)*: an action type provided by [ha-unity](https://github.com/tmeuze/ha-unity) through PropSense's extension API.
+## Getting started
 
-Similar tools exist for parts of this, for example label-based voice exposure in community integrations. PropSense aims to be the general engine: one selector model, safety guards, and an API other integrations can build actions on.
+PropSense needs Home Assistant 2026.9.0 or newer.
 
-## Install
+1. In HACS, open the menu, choose **Custom repositories**, and add `https://github.com/tmeuze/ha-propsense` as an **Integration**.
+2. Download **PropSense** and restart Home Assistant.
+3. Go to Settings, Devices & services, **Add integration**, and pick PropSense.
+4. Open **PropSense** in the sidebar (administrators only).
 
-### HACS (custom repository)
+To copy the integration by hand instead, put `custom_components/propsense` into your `<config>/custom_components/` folder and restart.
 
-1. HACS → ⋮ → **Custom repositories**.
-2. Add `https://github.com/tmeuze/ha-propsense` as an **Integration**.
-3. Download **PropSense**, then restart Home Assistant.
-4. Settings → Devices & services → **Add integration** → PropSense.
+### Your first rule
 
-Requires Home Assistant 2026.9.0 or newer.
+1. On the Rules tab, turn on **dry run** when the page offers it. Nothing is applied while it is on.
+2. Choose **Add rule**, pick a template or start empty, and fill in the selector. The live preview on the right shows what the rule selects.
+3. Add the action you want, then save.
+4. Open the Status tab, run a dry run, and read what would be added or removed.
+5. When that looks right, turn dry run off.
 
-### Manual
+### Safe first run
 
-Copy `custom_components/propsense` into `<config>/custom_components/` and restart.
+Because rules are the single source of truth, an empty or wrong rule set un-exposes everything PropSense manages on its first apply. That is the reason for steps 1 and 4 above. It also helps to keep exposure small: each exposed entity costs roughly 26 prompt tokens for an LLM conversation agent, and the `max_exposed` setting (100 by default) stops a plan that would expose more than that.
 
-## Concepts
+## Actions
 
-A **rule** has:
-
-- an **include** selector,
-- an optional **exclude** selector,
-- an **action** (expose to one or more assistants),
-- an enabled switch.
-
-A **selector** is a set of optional fields: `labels`, `areas`, `floors`, `domains`, `device_classes`, `entities`, `devices`, `groups`, `capabilities`, `integrations`, `manufacturers`, `models`, `entity_categories`, `name_patterns`, `label_patterns`, `states` and `conditions`. Capabilities are tags read from an entity's state: lights (`onoff`, `brightness`, `color_temp`, `color`, `white`), covers (`position`, `tilt`), fans (`speed`, `oscillate`, `direction`, `preset`) and climate entities (`heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`, `target_temp`).
-
-### One rule, several actions
-
-A rule is one selection plus any number of actions, so a single record can, for example, keep a group in sync, apply a label, turn the entities on at sunset and off at sunrise (two schedule actions, one per trigger). Edit the membership once and every action follows. Keep actions together when they should always apply to the same entities, and split them into separate rules when they need different selections or you want to switch one off on its own: the on/off switch belongs to the rule, not to an action. Rules can also feed each other through labels.
-
-### Semantics
-
-- Within one field, a list means **any of**.
-- Across fields, every non-empty field must match (**and**). Labels `Expose: Voice` plus area `Kitchen` means labelled *and* in the kitchen.
-- An **empty selector matches nothing**, so a half-edited rule can never expose everything. An exclude-only rule also matches nothing.
-- Rules are **additive**. An entity is wanted if any enabled rule includes it. A rule's exclude only subtracts from that same rule.
-- Entities inherit their device's labels (default on) and optionally their area's labels (default off). An entity's area falls back to its device's area, and its floor comes from the area.
-- Group fields expand group members, including nested groups.
-- Disabled entities are skipped.
-
-### Settings
-
-| Setting | Default | Meaning |
+| Action | What it does | Details |
 |---|---|---|
-| `managed_assistants` | Assist | Assistants PropSense owns. Anything not selected is un-exposed there. |
-| `blocked_domains` | `lock`, `alarm_control_panel`, `camera` | Never exposed, even if a rule lists them explicitly. Reported as blocked. |
-| `max_exposed` | 100 | If a plan would expose more than this to one assistant, nothing changes for that assistant and a Repairs issue is raised. `0` disables the guard. |
-| `inherit_device_labels` | on | Entities inherit their device's labels. |
-| `inherit_area_labels` | off | Entities inherit their area's labels. |
-| `dry_run` | off | Compute and report the plan without applying it. |
+| Expose to voice assistants | Exposes the selection to Assist, Alexa or Google Assistant and un-exposes everything else | [Actions](docs/actions.md#expose-to-voice-assistants) |
+| Keep a group in sync | Makes a group helper's members equal to the selection, and labels the group `[PropSense]` | [Actions](docs/actions.md#keep-a-groups-members-in-sync) |
+| Timers and schedules | Turns entities on or off after a delay, at a time of day, or at sunrise or sunset | [Actions](docs/actions.md#timers-and-schedules) |
+| Apply a label | Adds a label to the selection and removes it from entities that stop matching | [Actions](docs/actions.md#apply-a-label) |
+| Give a voice alias | Keeps an extra name on the selected entities for voice assistants | [Actions](docs/actions.md#give-a-voice-alias) |
+| Flag in Repairs | Lists the selection in Repairs, which suits hygiene checks | [Actions](docs/actions.md#flag-in-repairs) |
+| Run actions on enter or leave | Runs your own Home Assistant actions when an entity starts or stops matching | [Actions](docs/actions.md#run-actions-when-an-entity-enters-or-leaves) |
+| Show on a dashboard | Fills a named dashboard section, shown to the audience you choose | [Dashboards](docs/dashboards.md) |
+| Ship numeric history | Sends numeric states to a metrics endpoint you set, once you allow it | [Metrics](docs/metrics.md) |
 
-### Patterns and wildcards
+A rule can carry several actions at once, and they all share its selection. Keep actions together when they should always apply to the same entities. Split them into separate rules when they need different selections, or when you want to switch one off on its own, because the on/off switch belongs to the rule. Rules can also feed each other through labels.
 
-`name_patterns`, `label_patterns`, `manufacturers` and `models` accept `*` (any text) and `?` (one character), ignoring case. Name patterns are tried against both the entity id and its name, so `switch.*_plug` and `*outlet*` both work. Label patterns match label **names**, so `Expose: *` selects every label named like that, including ones you add later. Integrations match exactly (ignoring case). Entity categories are `primary` (no category), `config` and `diagnostic`.
+How a selector works (fields, wildcards, state conditions, and how rules combine) is in [Selectors and settings](docs/selectors.md).
 
-### State-based selection
+## Documentation
 
-`states` matches the entity's current state (any of a list, ignoring case). `conditions` read the state or an attribute:
-
-| Condition | Meaning |
+| | |
 |---|---|
-| `state < 20` | the state is a number below 20 |
-| `attr:battery_level <= 15` | the attribute is a number at most 15 |
-| `state between 10 20` | a number from 10 to 20 (either order) |
-| `state = on`, `attr:hvac_action != idle` | equal or not equal; numbers compare as numbers, anything else as text ignoring case |
+| [Documentation index](docs/README.md) | Every document, with a line on what it covers. |
+| [Actions](docs/actions.md) | What each action does and what it will not do. |
+| [Selectors and settings](docs/selectors.md) | The selector fields, rule semantics and every setting. |
+| [Dashboards](docs/dashboards.md) | Building a dashboard from rules, and what audiences do and don't protect. |
+| [Metrics](docs/metrics.md) | Shipping numeric history, and the limits on it. |
+| [Architecture](docs/architecture.md) | How the pieces fit, and the extension API for other integrations. |
+| [Ownership](docs/ownership.md) | What PropSense controls, what it leaves alone, and how to change each thing. |
+| [Security](docs/security.md) | Trust boundaries and what leaves your instance. |
+| [Decisions](docs/decisions.md) | The significant choices, with the reasoning and the cost. |
+| [Where this got to](docs/STATE.md) | Current state and known gaps. |
+| [Changelog](CHANGELOG.md) | What changed in each release. |
 
-Operators are `<`, `<=`, `>`, `>=`, `=`, `!=` and `between`. Any one condition may hold, and a missing state or attribute never matches (so `!=` does not match an entity that lacks the attribute).
-
-A selection that follows live state changes as entities change, so be deliberate about the action: an expose rule on `state = on` will expose and un-expose as things toggle. **Cost:** PropSense does not re-run the plan on every state change. When a state or attribute changes, it checks that one entity against the rules that use state, and re-runs (after a 5 second quiet period) only if the answer for that rule changed. Rules without state fields add no work.
-
-### Group action
-
-The **Keep a group's members in sync** action targets a Home Assistant group helper. Pick an existing group to edit, or give a name (and type) and PropSense creates it. Either way the group gets the `[PropSense]` label. The rules are the single source of truth: members added by hand are removed on the next apply. Entities of the wrong domain for the group type, other group helpers, and blocked domains are skipped and listed in the status page. Editing members reloads the group briefly.
-
-### Timers and schedules
-
-The **Turn on or off on a timer or schedule** action has three triggers:
-
-- **After being on (or off) for a duration**: an auto-off timer. It watches the entity's state, so it makes no difference whether the entity was switched in Home Assistant or by hand; if it changes to the other state first, the timer is cancelled. Deadlines are stored as absolute times, so a restart neither resets nor loses them. If a deadline passes while Home Assistant is down, the entity is turned off after start-up, provided it is still on. Entities that are already on when PropSense first sees them start their timer then.
-- **At a time of day**, optionally on chosen weekdays.
-- **At sunrise or sunset**, with an offset in minutes.
-
-For time and sun triggers, "catch up" runs a trigger that was missed while Home Assistant was down, if it is within the window you choose (0 skips it). Entities already in the wanted state are left alone. Only domains that can be turned on and off are supported (lights, switches, fans, input booleans, humidifiers, media players, climate, remotes, sirens, water heaters). Locks, alarm panels and cameras are blocked by default, and dry run stops anything from firing. Active timers and the next run of each schedule appear on the Status page.
-
-### Labels, aliases, flags and event actions
-
-- **Apply a label** adds a label (created if missing) to every selected entity and removes it from entities that stop matching, so the rules are the single source of truth for that label. Only the entity's own labels change, not ones inherited from its device or area, and entities without a registry entry are skipped. Because other rules can select on the label, rules can feed each other (a rule labels batteries, another notifies when something gets the label).
-- **Give a voice alias** does the same for one or more aliases on an entity; its other aliases are never touched.
-- **Flag in Repairs** lists the selected entities under your title in Home Assistant's Repairs, and the issue goes away when nothing matches. Use a rule that selects what *shouldn't* exist, for example lights excluding any label (`label_patterns: *`).
-- **Run actions when an entity enters or leaves** runs ordinary Home Assistant actions (services, notifications, scripts, conditions) for each entity that starts or stops matching. In templates, `entity_id`, `event` (`enter` or `leave`) and `name` are available. The first time a rule is seen it only records what matches, so it never fires for entities that already match; a restart does not re-fire; and at most 20 entities (configurable) run per evaluation.
-- **Loop breaker:** rules that apply labels can chase each other. If applying changed something 20 times within a minute, PropSense pauses for five minutes (it still reports what it would do) and raises a Repairs issue, then resumes on its own.
-
-### Dashboards
-
-The **Show on a dashboard** action puts a rule's entities in a titled section of a named dashboard, grouped by area, floor, domain or not at all. PropSense stores no dashboard layout: a small dashboard strategy asks PropSense for the current sections each time the dashboard loads, so a changed rule changes the dashboard, and the same rules give the same dashboard on any instance.
-
-1. Add a rule with the **Show on a dashboard** action: a dashboard name (for example `guest`), a section title, how to group, and an audience.
-2. Create a dashboard (Settings → Dashboards → Add), open it, choose the three-dot menu → Edit → raw configuration editor, and replace its contents with:
-
-```yaml
-strategy:
-  type: custom:propsense
-  dashboard: guest   # the name from the rule
-  title: Guest       # optional
-```
-
-Each rule section becomes a tab; each group (area, floor or domain) becomes a block of tiles. If the dashboard is empty for a viewer, it says so.
-
-**Audience** is `everyone` (default), `admins`, `non-admins`, or specific Home Assistant user ids; several can be combined. A kiosk or guest account that is not an admin sees only sections whose audience includes it. To make a dashboard visible only to non-admins, also switch off *Require admin* and hide it from the sidebar in the dashboard's settings as you prefer.
-
-**This is not access control.** A dashboard only chooses what to show. Every logged-in user can still read every entity's state through Home Assistant's API, and Home Assistant has no per-entity permissions. Use audiences for tidy guest and kiosk views; use the voice **expose** action when you need a boundary that is enforced. Subnet-based login (the `trusted_networks` provider) lives in `configuration.yaml`, which no integration can edit; see Home Assistant's authentication documentation.
-
-### Metrics shipping
-
-The **Ship numeric history** action sends the numeric states of the entities a rule selects, in the InfluxDB line protocol, to one URL: the **Metrics URL** setting (for example a VictoriaMetrics `/write` endpoint). There is no default: you set your own. It is **off until you set a Metrics URL and turn on "Allow sending data off this instance"** in Settings, and it uses no credentials, so the endpoint should only accept posts from your own network. PropSense verifies the endpoint's TLS certificate and never relaxes that check: with an HTTPS URL the certificate must be trusted by the machine Home Assistant runs on (for example one issued by your own CA).
-
-Each point looks like `homeassistant,area=Kitchen,device_class=temperature,domain=sensor,entity_id=sensor.kitchen_temp,unit_of_measurement=°C value=21.5 <ns timestamp>`. The area, device class and unit tags are optional.
-
-- **Cost:** PropSense listens only to the state changes of the entities selected, never to every event. Each entity emits at most one point per interval (60 s by default; the latest value wins) and points are posted in batches every 30 s. A rule may select at most 200 entities by default (up to 1000); a wider rule is refused and a repair issue is raised.
-- **What is sent:** numeric states only. `unknown`, `unavailable` and text are skipped; on/off states are sent as 1/0 only if you turn that on. Locks, alarm panels and cameras are blocked by default.
-- **If the endpoint is down:** points wait in a bounded in-memory buffer (5000) and are retried every 30 s; the oldest are dropped when it is full.
-- **Restarts:** the buffer is not saved, so a restart loses what had not been sent (at most one 30 s window, plus any outage).
-- **Dry run** and withdrawing the permission discard waiting points and send nothing.
-
-## Configure
-
-Open **PropSense** in the sidebar (administrators only).
-
-- **Rules:** add, edit, enable or disable and delete rules. The editor shows a live preview of the entities a rule selects, and the prompt-token estimate if you expose them to an LLM agent.
-- **Status:** the last result per action and target, a **dry run** that shows what would be added or removed, and **Apply now**.
-- **Explain:** pick an entity and see which rules select it, which exclude it, and what each action would do.
-- **Settings:** managed assistants, blocked domains, the size guard, label inheritance, dry run, and whether third-party actions are allowed.
-
-Rules are stored in PropSense's own storage, and settings in the config entry options. The integration's **Configure** button still offers the older step-by-step flow for the same rules and settings.
-
-### Services
+## Services
 
 | Service | Purpose |
 |---|---|
-| `propsense.resync` | Re-evaluate and apply now. `dry_run: true` reports without applying. |
-| `propsense.preview` | Return the plan (what would be exposed and un-exposed) as response data. |
+| `propsense.resync` | Re-evaluate the rules and apply now. Pass `dry_run: true` to report without applying. |
+| `propsense.preview` | Return the plan (what would be added and removed) as response data. |
 
 A status sensor shows the last result, and diagnostics include the rules, settings and last result.
 
-### When it runs
-
-On Home Assistant start, on registry changes (entity, device, area, floor, label), when the state of a group used by a rule changes, and hourly. Triggers are debounced by 2 seconds.
-
-## Safe first run
-
-With the single-source-of-truth model, an empty or wrong rule set un-exposes everything on the first apply.
-
-1. Turn on **dry run** (the Rules page offers it while there are no rules).
-2. Add your rules and watch the live preview.
-3. Open **Status → Dry run** and check what would be added and removed.
-4. Turn dry run off.
-
-Mind your model's context budget too. Each exposed entity costs roughly 26 prompt tokens for an LLM conversation agent, so keep exposure small and curated. `max_exposed` is the guard rail.
-
 ## Development
 
+Create a Python virtual environment with the pyenv or venv tooling you normally use, then:
+
 ```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements-test.txt
-.venv/bin/python -m pytest -q
+pip install -r requirements-test.txt
+python -m pytest -q
 ```
 
-The panel is a Lit web component in `frontend/`. The built bundle is committed to `custom_components/propsense/frontend/` so HACS installs need no build step; CI fails if it is out of date.
+The panel is a Lit web component in `frontend/`. The built bundle is committed to `custom_components/propsense/frontend/` so a HACS install needs no build step, and CI fails if the bundle is out of date.
 
 ```bash
 cd frontend && npm ci && npm run build
 ```
 
-### Extending PropSense
+Other integrations add their own actions through the extension API. The module docstring in `custom_components/propsense/api.py` is the reference, and [Architecture](docs/architecture.md) explains the design. See also [AGENTS.md](AGENTS.md) for how contributors and AI agents should work in this repository.
 
-Other integrations register action types through `custom_components/propsense/api.py` (see the docstring there). A provider subclasses `ActionType`, declares `dependencies: ["propsense"]`, and calls `async_register_action(hass, MyAction())`. Actions are either `state` (kept equal to the selection) or `edge` (fire when an entity enters or leaves it). They stay dormant until the user allows third-party actions in the settings.
+## Licence
 
-`engine.py` is pure policy with no Home Assistant imports. `snapshot.py` builds entity facts from the registries and `manager.py` applies the result.
-
-## License
-
-MIT
+MIT. See [LICENSE](LICENSE).
