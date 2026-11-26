@@ -24,6 +24,8 @@ Not verified:
 - The Python interpreter exits with a segmentation fault at shutdown on the Home Assistant 2026.10 beta with pyenv Python 3.14. It happens with and without PropSense loaded and is not understood. Development instances are stopped with `kill -9`.
 - Grant to child instances belongs to ha-unity and is built on the extension API, not in this repository.
 - Screenshots of the panel are not in the README yet.
+- The conformIT audit has not been run on this repository from an AI session. VERIFY by running it by hand.
+- There is no automated viewport test. See [accessibility.md](accessibility.md) for what was checked by hand.
 - Conditions on another entity's state and "on for more than an hour" conditions are not supported.
 
 ## Ideas, not planned

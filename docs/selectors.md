@@ -59,7 +59,7 @@ PropSense does not re-run the plan on every state change. When a state or attrib
 | Inherit device labels | on | Entities inherit their device's labels. |
 | Inherit area labels | off | Entities inherit their area's labels. |
 | Dry run | off | Work out and report the plan without applying it. |
-| Allow third-party actions | off | Lets actions from other integrations run. Rules that use them stay dormant (the panel shows Paused) until this is on. |
+| Allow third-party actions | off | Lets actions from other integrations run. Rules that use them stay paused until this is on. |
 | Allow sending data off this instance | off | Needed before the metrics action sends anything. |
 | Metrics URL | none | The one address metrics are sent to. There is no default. |
 

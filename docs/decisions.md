@@ -22,7 +22,7 @@ Significant choices, with what each cost and what would justify revisiting it. E
 
 ## 3. Third-party actions are off by default
 
-**Chosen:** Actions from other integrations stay dormant until the user turns on a setting, with a warning that explains the risk. Actions that send data off the instance need a second permission.
+**Chosen:** Actions from other integrations stay paused until the user turns on a setting, with a warning that explains the risk. Actions that send data off the instance need a second permission.
 
 **Cost:** An extra step for people who install an integration that provides actions.
 
@@ -83,3 +83,17 @@ Significant choices, with what each cost and what would justify revisiting it. E
 **Chosen:** PropSense follows the conformIT documentation standard: README, `AGENTS.md`, `docs/STATE.md`, `docs/decisions.md`, `docs/architecture.md`, `docs/ownership.md`, `docs/security.md`, `docs/credits.md` and a changelog. The deep reference lives under `docs/`, and the README stays short.
 
 **Cost:** More files to keep accurate.
+
+## 11. A release-age cooldown for dependency updates
+
+**Chosen:** `.github/dependabot.yml` waits 7 days before proposing a new release for GitHub Actions, npm (`frontend/`) and pip. For npm and pip it waits 14 days for a major version. The GitHub Actions entry has only `default-days`, because conformIT reports that Dependabot does not support the semver keys there and may reject the whole file (not reproduced here, VERIFY). After merging, check Insights, Dependency graph, Dependabot for a configuration error. `frontend/.npmrc` sets `min-release-age=7`. Security updates are exempt, which Dependabot does automatically.
+
+**Cost:** Slower access to fixes that are not marked as security fixes.
+
+**What it cannot do:** `requirements-test.txt` is unpinned, so CI installs the newest test packages at run time and the cooldown cannot hold those back. `npm ci` uses the lockfile, so `min-release-age` only affects local installs. Dependabot security updates are a repository setting, not a file. Whether Dependabot reads `requirements-test.txt` (VERIFY) and which npm version first knows `min-release-age` (VERIFY, npm 11.20 does) are unchecked.
+
+## 12. Display options in the panel
+
+**Chosen:** Text size, high contrast and reduce motion, remembered per browser. Colour scheme follows Home Assistant's theme.
+
+**Cost:** Home Assistant's own form fields appear to ignore the text size. The first version set the size on the panel element itself, which changed only the title. It is now set on the panel's own containers. What was tested is in [accessibility.md](accessibility.md).

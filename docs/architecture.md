@@ -2,7 +2,7 @@
 
 PropSense is a Home Assistant custom integration with a pure rules engine in the middle, a manager that applies the result, and a set of pluggable actions on the outside. A sidebar panel and a websocket API sit on top.
 
-![How PropSense works](images/how-it-works.svg)
+![PropSense overview](images/overview.svg)
 
 ## The pieces
 
@@ -31,7 +31,7 @@ Actions are either **state** (kept equal to the selection) or **edge** (fired wh
 
 Another integration can add an action type. It declares `dependencies: ["propsense"]` in its manifest, subclasses `ActionType`, and calls `async_register_action(hass, MyAction())` during its own setup. PropSense then evaluates the rules and tells the action what to add and remove for each target. A provider never sees the rules or the registries.
 
-Third-party actions stay dormant until the user turns on **Allow third-party actions**. Rules that name an action that is not installed are kept and reported as dormant, and a missing provider never causes removals. Actions that send data off the instance must set `needs_external_data`, and stay dormant until sending is allowed too.
+Third-party actions stay paused (the code calls this dormant) until the user turns on **Allow third-party actions**. Rules that name an action that is not installed are kept and reported as paused, and a missing provider never causes removals. Actions that send data off the instance must set `needs_external_data`, and stay dormant until sending is allowed too.
 
 The module docstring in `custom_components/propsense/api.py` is the reference, and `API_VERSION` changes when something breaks.
 
