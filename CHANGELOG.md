@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Display options** on the Settings tab: text size, high contrast and reduce motion, remembered per browser.
+- **Narrow screens:** rule buttons, the editor and the tabs now wrap, so nothing runs off a 320 pixel screen. Controls are at least 44 pixels high on touch screens, and keyboard focus is visible.
+- Error messages end with a next step and offer **Try again**.
+- README reordered to the shared standard with a new overview diagram, an accessibility page, and a Dependabot cooldown.
 - Documentation: a shorter README that leads with what PropSense is for, and a `docs/` folder with the actions, selectors and settings, dashboards, metrics, architecture, ownership, security, credits, decisions and current state. Added `AGENTS.md`.
 
 ## 0.11.0

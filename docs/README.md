@@ -5,6 +5,7 @@
 | [Actions](actions.md) | What each built-in action does and what it will not do. |
 | [Selectors and settings](selectors.md) | The selector fields, how rules combine, state conditions, and every setting. |
 | [Dashboards](dashboards.md) | Building a dashboard from rules, audiences, and what they do not protect. |
+| [Accessibility](accessibility.md) | The display options and what was tested. |
 | [Metrics](metrics.md) | Shipping numeric history to your own endpoint, and the limits on it. |
 | [Architecture](architecture.md) | How the pieces fit, how a run works, and the extension API. |
 | [Ownership](ownership.md) | What PropSense controls, what it leaves alone, and where to change each thing. |

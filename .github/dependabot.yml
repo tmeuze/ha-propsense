@@ -1,0 +1,28 @@
+# Dependency updates wait for a release to age before they are proposed:
+# 7 days normally, and 14 for a major version where the ecosystem supports it. Security updates are exempt, which
+# Dependabot does automatically. See docs/security.md and docs/decisions.md.
+version: 2
+updates:
+  # github-actions takes only default-days: it does not support the semver keys.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="t d">
+<title id="t">PropSense overview</title><desc id="d">Four layers from top to bottom. Home Assistant's facts about entities feed a rule, which has a selector, one or more actions and a live preview. The actions expose entities to voice assistants, manage groups, labels and aliases, run timers and schedules, and fill dashboards. Safety checks sit last: dry run, blocked domains, a size limit and a loop breaker.</desc>
+<style>
+:root{--bg:#ffffff;--ink:#16202b;--mute:#566474;--card:#ffffff;
+--b:#e8f0fd;--bs:#2f6fdb;--g:#e6f5ec;--gs:#1f8a4c;--p:#f1eafb;--ps:#7a45c9;--a:#fdf1e0;--as:#c27410}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1620;--ink:#e6edf5;--mute:#98a6b6;--card:#18222e;
+--b:#15233b;--bs:#6aa2ff;--g:#12291d;--gs:#4cc27f;--p:#231a37;--ps:#b18cf0;--a:#33250f;--as:#f0a947}}
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;fill:var(--ink)}
+.h{font-size:15px;font-weight:700}.s{font-size:11.5px;fill:var(--mute)}.c{font-size:12.5px;font-weight:600}.cs{font-size:10.5px;fill:var(--mute)}
+</style>
+<rect width="960" height="540" rx="14" fill="var(--bg)"/>
+
+<rect x="48" y="16" width="864" height="116" rx="12" fill="var(--b)" stroke="var(--bs)" stroke-width="1.5"/>
+<text class="h" x="64" y="42">1  Home Assistant</text>
+<text class="s" x="64" y="62">the facts a rule reads</text>
+<rect x="284" y="40" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--bs)" stroke-opacity=".55"/>
+<text class="c" x="296" y="64">Places and labels</text><text class="cs" x="296" y="84">areas, floors, labels</text>
+<rect x="436" y="40" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--bs)" stroke-opacity=".55"/>
+<text class="c" x="448" y="64">Origin</text><text class="cs" x="448" y="84">integration, model</text>
+<rect x="588" y="40" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--bs)" stroke-opacity=".55"/>
+<text class="c" x="600" y="64">Capabilities</text><text class="cs" x="600" y="84">color, position</text>
+<rect x="740" y="40" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--bs)" stroke-opacity=".55"/>
+<text class="c" x="752" y="64">State</text><text class="cs" x="752" y="84">and attributes</text>
+
+<rect x="48" y="144" width="864" height="116" rx="12" fill="var(--p)" stroke="var(--ps)" stroke-width="1.5"/>
+<text class="h" x="64" y="170">2  A rule</text>
+<text class="s" x="64" y="190">one selection, many actions</text>
+<rect x="284" y="168" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--ps)" stroke-opacity=".55"/>
+<text class="c" x="296" y="192">Selector</text><text class="cs" x="296" y="212">which entities match</text>
+<rect x="436" y="168" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--ps)" stroke-opacity=".55"/>
+<text class="c" x="448" y="192">Actions</text><text class="cs" x="448" y="212">one or more per rule</text>
+<rect x="588" y="168" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--ps)" stroke-opacity=".55"/>
+<text class="c" x="600" y="192">Preview</text><text class="cs" x="600" y="212">live, before saving</text>
+
+<rect x="48" y="272" width="864" height="116" rx="12" fill="var(--g)" stroke="var(--gs)" stroke-width="1.5"/>
+<text class="h" x="64" y="298">3  What it does</text>
+<text class="s" x="64" y="318">plus metrics, Repairs, run</text>
+<rect x="284" y="296" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--gs)" stroke-opacity=".55"/>
+<text class="c" x="296" y="320">Voice</text><text class="cs" x="296" y="340">Assist, Alexa, Google</text>
+<rect x="436" y="296" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--gs)" stroke-opacity=".55"/>
+<text class="c" x="448" y="320">Groups and tags</text><text class="cs" x="448" y="340">labels and aliases</text>
+<rect x="588" y="296" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--gs)" stroke-opacity=".55"/>
+<text class="c" x="600" y="320">Time</text><text class="cs" x="600" y="340">timers, schedules</text>
+<rect x="740" y="296" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--gs)" stroke-opacity=".55"/>
+<text class="c" x="752" y="320">Dashboards</text><text class="cs" x="752" y="340">sections by audience</text>
+
+<rect x="48" y="400" width="864" height="116" rx="12" fill="var(--a)" stroke="var(--as)" stroke-width="1.5"/>
+<text class="h" x="64" y="426">4  Safety</text>
+<text class="s" x="64" y="446">checked before applying</text>
+<rect x="284" y="424" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--as)" stroke-opacity=".55"/>
+<text class="c" x="296" y="448">Dry run</text><text class="cs" x="296" y="468">change nothing</text>
+<rect x="436" y="424" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--as)" stroke-opacity=".55"/>
+<text class="c" x="448" y="448">Blocked domains</text><text class="cs" x="448" y="468">locks and alarms</text>
+<rect x="588" y="424" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--as)" stroke-opacity=".55"/>
+<text class="c" x="600" y="448">Size limit</text><text class="cs" x="600" y="468">default 100 exposed</text>
+<rect x="740" y="424" width="142" height="64" rx="8" fill="var(--card)" stroke="var(--as)" stroke-opacity=".55"/>
+<text class="c" x="752" y="448">Loop breaker</text><text class="cs" x="752" y="468">pauses runaway rules</text>
+</svg>

@@ -27,3 +27,7 @@ Only the metrics action sends anything out, and only when you have set a Metrics
 ## What PropSense does not touch
 
 It never creates or edits users, never edits `configuration.yaml` or the stored dashboard configuration, and never stores credentials.
+
+## Dependency updates
+
+Dependabot waits 7 days before proposing a release (14 for a major npm or Python version) and proposes security updates immediately. See [decisions](decisions.md) #11 for what this cannot cover.

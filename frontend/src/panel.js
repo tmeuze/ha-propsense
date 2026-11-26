@@ -56,6 +56,29 @@ function saveCollapsed(list) {
     /* storage unavailable: the choice just is not remembered */
   }
 }
+// Display options are kept per browser. With nothing saved, motion follows the system setting.
+const TEXT_SIZES = [
+  ["small", "Small", 0.9],
+  ["default", "Default", 1],
+  ["large", "Large", 1.15],
+  ["largest", "Largest", 1.3],
+];
+function loadDisplay() {
+  try {
+    return { size: "default", contrast: false, ...JSON.parse(localStorage.getItem("propsense.display") || "{}") };
+  } catch (_) {
+    return { size: "default", contrast: false };
+  }
+}
+function saveDisplay(value) {
+  try {
+    localStorage.setItem("propsense.display", JSON.stringify(value));
+  } catch (_) {
+    /* storage unavailable: the choice just is not remembered */
+  }
+}
+const systemReducesMotion = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const NEXT_STEP = " Reload the page and try again. If it keeps happening, look in Settings, System, Logs.";
 const STATE_FIELDS = ["states", "conditions"];
 const STATE_OPTIONS = ["on", "off", "unavailable", "unknown", "open", "closed", "home", "not_home", "locked", "unlocked", "playing", "idle", "paused"];
 const OPS = [
@@ -276,6 +299,7 @@ class PropSensePanel extends LitElement {
     _filter: { state: true },
     _query: { state: true },
     _collapsed: { state: true },
+    _display: { state: true },
   };
 
   constructor() {
@@ -284,6 +308,7 @@ class PropSensePanel extends LitElement {
     this._filter = "all";
     this._query = "";
     this._collapsed = loadCollapsed();
+    this._display = loadDisplay();
     this._data = null;
     this._error = "";
     this._busy = false;
@@ -317,7 +342,7 @@ class PropSensePanel extends LitElement {
       this._settingsDraft = { ...this._data.settings };
       this._error = "";
     } catch (err) {
-      this._error = err.message || String(err);
+      this._error = `PropSense could not load: ${err.message || String(err)}.${NEXT_STEP}`;
     }
   }
 
@@ -341,7 +366,7 @@ class PropSensePanel extends LitElement {
       await fn();
       this._error = "";
     } catch (err) {
-      this._error = err.message || String(err);
+      this._error = `That did not work: ${err.message || String(err)}.${NEXT_STEP}`;
     } finally {
       this._busy = false;
     }
@@ -544,6 +569,46 @@ class PropSensePanel extends LitElement {
     this._setEditing({ actions: this._editing.actions.filter((_, j) => j !== i) });
   }
 
+  // ------------------------------------------------------------- display
+
+  updated() {
+    const scale = TEXT_SIZES.find(([id]) => id === this._display.size)?.[2] ?? 1;
+    this.style.setProperty("--ps-scale", String(scale));
+    this.toggleAttribute("contrast", !!this._display.contrast);
+    const reduce = this._display.motion === undefined ? systemReducesMotion() : !!this._display.motion;
+    this.toggleAttribute("reduce-motion", reduce);
+  }
+
+  _setDisplay(patch) {
+    this._display = { ...this._display, ...patch };
+    saveDisplay(this._display);
+  }
+
+  _renderDisplay() {
+    const d = this._display;
+    const reduce = d.motion === undefined ? systemReducesMotion() : !!d.motion;
+    return html`<ha-card class="pad">
+      <h3>Display</h3>
+      <p class="muted">These apply to this browser only and are remembered. Light and dark follow your Home Assistant theme, which you choose in your profile.</p>
+      <div class="field">
+        <div class="label">Text size</div>
+        <div class="chips" role="group" aria-label="Text size">
+          ${TEXT_SIZES.map(([id, label]) => html`<button class="chip ${d.size === id ? "on" : ""}"
+            aria-pressed=${d.size === id ? "true" : "false"}
+            @click=${() => this._setDisplay({ size: id })}>${label}</button>`)}
+        </div>
+      </div>
+      <label class="check">
+        <input type="checkbox" .checked=${!!d.contrast} @change=${(e) => this._setDisplay({ contrast: e.target.checked })} />
+        <span>High contrast<div class="muted">Stronger borders and full-strength secondary text.</div></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" .checked=${reduce} @change=${(e) => this._setDisplay({ motion: e.target.checked })} />
+        <span>Reduce motion<div class="muted">Starts from your system setting until you change it here.</div></span>
+      </label>
+    </ha-card>`;
+  }
+
   // ---------------------------------------------------------------- render
 
   render() {
@@ -557,13 +622,17 @@ class PropSensePanel extends LitElement {
         ${TABS.map(
           ([id, label]) => html`<button
             class="tab ${this._tab === id ? "active" : ""}"
+            aria-current=${this._tab === id ? "page" : "false"}
             @click=${() => (this._tab = id)}
           >${label}</button>`
         )}
       </div>
-      ${this._toastMsg ? html`<div class="toast">${this._toastMsg}</div>` : nothing}
+      ${this._toastMsg ? html`<div class="toast" role="status">${this._toastMsg}</div>` : nothing}
       <div class="content">
-        ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
+        ${this._error
+          ? html`<div class="error" role="alert">${this._error}
+              <button @click=${() => { this._error = ""; this._load(); }}>Try again</button></div>`
+          : nothing}
         ${this._data ? this._renderTab() : nothing}
       </div>
     `;
@@ -631,8 +700,8 @@ class PropSensePanel extends LitElement {
         <input type="text" class="search" placeholder="Search rules" .value=${this._query}
           @input=${(e) => (this._query = e.target.value)} />
         <div class="chips">
-          <button class="chip ${filtered ? "" : "on"}" @click=${() => (this._filter = "all")}>All ${rules.length}</button>
-          ${present.map(([id, label, icon]) => html`<button class="chip ${this._filter === id ? "on" : ""}"
+          <button class="chip ${filtered ? "" : "on"}" aria-pressed=${filtered ? "false" : "true"} @click=${() => (this._filter = "all")}>All ${rules.length}</button>
+          ${present.map(([id, label, icon]) => html`<button class="chip ${this._filter === id ? "on" : ""}" aria-pressed=${this._filter === id ? "true" : "false"}
             @click=${() => (this._filter = this._filter === id ? "all" : id)}>
             <ha-icon .icon=${icon}></ha-icon>${label}</button>`)}
         </div>
@@ -1274,8 +1343,9 @@ class PropSensePanel extends LitElement {
             @input=${(e) => this._setSetting("metrics_url", e.target.value.trim())} />
         </div>
         ${check("allow_third_party_actions", "Allow third-party actions",
-          "Warning: other integrations can register actions that change things beyond voice exposure, such as granting entities to other Home Assistant instances. Rules using them stay dormant until this is on. Only enable it for integrations you trust.")}
+          "Warning: other integrations can register actions that change things beyond voice exposure, such as granting entities to other Home Assistant instances. Rules using them stay paused until this is on. Only enable it for integrations you trust.")}
       </ha-card>
+      ${this._renderDisplay()}
     `;
   }
 
@@ -1292,8 +1362,10 @@ class PropSensePanel extends LitElement {
   static styles = css`
     :host { display: block; min-height: 100vh; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
     .toolbar { display: flex; align-items: center; height: 56px; padding: 0 16px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); }
-    .title { font-size: 20px; margin-left: 8px; }
-    .tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--divider-color); background: var(--card-background-color); overflow-x: auto; }
+    /* Sized on the panel's own containers: a size set on :host is overridden from outside. */
+    .toolbar, .tabs, .content, .toast { font-size: calc(14px * var(--ps-scale, 1)); }
+    .title { font-size: calc(20px * var(--ps-scale, 1)); margin-left: 8px; }
+    .tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--divider-color); background: var(--card-background-color); flex-wrap: wrap; }
     .tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 12px 14px; color: var(--secondary-text-color); font: inherit; cursor: pointer; }
     .tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
     .content { max-width: 1100px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
@@ -1315,7 +1387,8 @@ class PropSensePanel extends LitElement {
     .rule-actions { display: flex; align-items: center; gap: 8px; }
     .sel { margin-top: 8px; }
     .editor { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
-    @media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
+    @media (max-width: 800px) { .editor { grid-template-columns: minmax(0, 1fr); } }
+    .col { min-width: 0; }
     .sticky { position: sticky; top: 8px; }
     .field { margin-bottom: 14px; }
     .label { font-weight: 500; margin-bottom: 4px; }
@@ -1376,6 +1449,24 @@ class PropSensePanel extends LitElement {
     .action-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85em; padding: 3px 10px; border-radius: 12px; background: var(--secondary-background-color); }
     .action-no { font-size: 0.8em; color: var(--secondary-text-color); min-width: 1.2em; }
     .add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+    :focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+    .error button { margin-left: 8px; }
+    @media (pointer: coarse) {
+      button, input[type="text"], input[type="number"], select, summary, .tab { min-height: 44px; }
+      .check input { width: 24px; height: 24px; }
+    }
+    :host([contrast]) .muted, :host([contrast]) .help { color: var(--primary-text-color); }
+    :host([contrast]) ha-card { --ha-card-border-width: 2px; --ha-card-border-color: var(--primary-text-color); border: 2px solid var(--primary-text-color); }
+    :host([contrast]) button:not(.tab):not(.section-head), :host([contrast]) input, :host([contrast]) select, :host([contrast]) .action { border-width: 2px; border-color: var(--primary-text-color); }
+    :host([reduce-motion]) *, :host([reduce-motion]) *::before, :host([reduce-motion]) *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    /* Reflow: long names, ids and large text must wrap rather than widen the page. */
+    .content { overflow-wrap: anywhere; }
+    .rule-actions { flex-wrap: wrap; }
+    .action .row select { min-width: 0; }
+    .row > * { min-width: 0; }
+    /* Selected state never relies on colour alone. */
+    .tab.active, .chip.on { font-weight: 700; }
+    .tab.active { border-bottom-width: 4px; border-bottom-color: var(--primary-color); }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--primary-text-color); color: var(--card-background-color); padding: 10px 18px; border-radius: 20px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   `;
 }
